@@ -1,0 +1,28 @@
+services:
+  # Backend Spring Boot
+  - type: web
+    name: recibo-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon
+    plan: free
+    envVars:
+      - key: SPRING_MAIL_HOST
+        value: email-smtp.us-east-2.amazonaws.com
+      - key: SPRING_MAIL_PORT
+        value: 587
+      - key: SPRING_MAIL_USERNAME
+        sync: false  # Defina manualmente no Render Dashboard
+      - key: SPRING_MAIL_PASSWORD
+        sync: false  # Defina manualmente no Render Dashboard
+      - key: APP_EMAIL_REMETENTE
+        value: lud.galvao@precisaoadm.com.br
+      - key: APP_EMAIL_NOME_REMETENTE
+        value: Sistema de Recibos - Precisao
+      - key: APP_FRONTEND_URL
+        sync: false  # Defina manualmente após criar o frontend
+      - key: JAVA_TOOL_OPTIONS
+        value: "-Xmx512m -Xms256m"
+    healthCheckPath: /recibos
+
+

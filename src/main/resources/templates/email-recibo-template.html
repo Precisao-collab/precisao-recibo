@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Recibo de Pagamento - Pró-Labore</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            background-color: #f4f4f4;
+            padding: 20px;
+        }
+
+        .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #0066cc 0%, #9333EA 50%, #EF4444 100%);
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px 25px;
+        }
+
+        .greeting {
+            font-size: 16px;
+            color: #333333;
+            margin-bottom: 20px;
+        }
+
+        .greeting strong {
+            color: #9333EA;
+        }
+
+        .message-text {
+            font-size: 15px;
+            color: #555555;
+            margin-bottom: 25px;
+            line-height: 1.8;
+        }
+
+        .info-card {
+            background: linear-gradient(135deg, #f0f9ff 0%, #f3e8ff 50%, #fef2f2 100%);
+            border-left: 5px solid #9333EA;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(0, 102, 204, 0.1);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #333333;
+            font-size: 14px;
+        }
+
+        .info-value {
+            color: #555555;
+            font-size: 14px;
+            text-align: right;
+        }
+
+        .valor-destaque {
+            background: linear-gradient(135deg, #0066cc 0%, #9333EA 50%, #EF4444 100%);
+            color: #ffffff;
+            padding: 15px 20px;
+            border-radius: 6px;
+            text-align: center;
+            margin: 25px 0;
+        }
+
+        .valor-destaque .label {
+            font-size: 13px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .valor-destaque .valor {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .attachment-box {
+            background-color: #f9f9f9;
+            border: 2px dashed #cccccc;
+            border-radius: 6px;
+            padding: 20px;
+            text-align: center;
+            margin: 25px 0;
+        }
+
+        .attachment-box .icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .attachment-box .text {
+            font-size: 14px;
+            color: #666666;
+        }
+
+        .attachment-box .filename {
+            font-weight: 600;
+            color: #9333EA;
+            margin-top: 5px;
+        }
+
+        .info-notice {
+            background-color: #fff9e6;
+            border-left: 4px solid #ffa500;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            font-size: 13px;
+            color: #666666;
+        }
+
+        .divider {
+            height: 1px;
+            background: linear-gradient(to right, transparent, #cccccc, transparent);
+            margin: 30px 0;
+        }
+
+        .footer {
+            background-color: #f8f9fa;
+            padding: 25px;
+            text-align: center;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .footer-logo {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #0066cc 0%, #9333EA 50%, #EF4444 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .footer-text {
+            font-size: 13px;
+            color: #666666;
+            margin: 5px 0;
+        }
+
+        .footer-links {
+            margin: 15px 0;
+        }
+
+        .footer-links a {
+            color: #9333EA;
+            text-decoration: none;
+            margin: 0 10px;
+            font-size: 12px;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
+        .copyright {
+            font-size: 12px;
+            color: #999999;
+            margin-top: 15px;
+        }
+
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #0066cc 0%, #9333EA 50%, #EF4444 100%);
+            color: #ffffff;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 600;
+            font-size: 14px;
+            margin: 20px 0;
+        }
+
+        .button:hover {
+            background: linear-gradient(135deg, #0052a3 0%, #7C3AED 50%, #DC2626 100%);
+        }
+
+        /* Responsivo */
+        @media only screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .header h1 {
+                font-size: 20px;
+            }
+
+            .content {
+                padding: 20px 15px;
+            }
+
+            .info-row {
+                flex-direction: column;
+                gap: 5px;
+            }
+
+            .info-value {
+                text-align: left;
+            }
+
+            .valor-destaque .valor {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <!-- Cabeçalho -->
+        <div class="header">
+            <img src="cid:logo" alt="Precisão" style="max-width: 200px; margin-bottom: 15px;">
+            <h1>Recibo de Pagamento</h1>
+            <p>Pró-Labore</p>
+        </div>
+
+        <!-- Conteúdo Principal -->
+        <div class="content">
+            <!-- Saudação -->
+            <div class="greeting">
+                Prezado(a) <strong>{{NOME_DESTINATARIO}}</strong>,
+            </div>
+
+            <!-- Mensagem -->
+            <div class="message-text">
+                Segue em anexo o seu recibo de pagamento de pró-labore. 
+                Este documento comprova o pagamento realizado e contém todas as 
+                informações fiscais necessárias.
+            </div>
+
+            <!-- Valor em Destaque -->
+            <div class="valor-destaque">
+                <div class="label">Valor do Pagamento</div>
+                <div class="valor">{{VALOR_BRUTO}}</div>
+            </div>
+
+            <!-- Informações do Recibo -->
+            <div class="info-card">
+                <div class="info-row">
+                    <span class="info-label">Prestador:</span>
+                    <span class="info-value">{{NOME_PRESTADOR}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">CPF:</span>
+                    <span class="info-value">{{CPF_PRESTADOR}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Condomínio:</span>
+                    <span class="info-value">{{NOME_CONDOMINIO}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Data de Emissão:</span>
+                    <span class="info-value">{{DATA_EMISSAO}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Mês de Referência:</span>
+                    <span class="info-value">{{MES_REFERENCIA}}</span>
+                </div>
+            </div>
+
+            <!-- Descontos -->
+            <div class="info-card" style="background: linear-gradient(135deg, #fef2f2 0%, #fce7f3 50%, #fef2f2 100%); border-left-color: #EF4444;">
+                <div class="info-row">
+                    <span class="info-label">Valor Bruto:</span>
+                    <span class="info-value">{{VALOR_BRUTO}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">INSS (11%):</span>
+                    <span class="info-value">- {{VALOR_INSS}}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label" style="font-size: 16px; color: #EF4444;">Valor Líquido:</span>
+                    <span class="info-value" style="font-size: 16px; font-weight: 700; color: #EF4444;">{{VALOR_LIQUIDO}}</span>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="message-text" style="margin-top: 30px; font-size: 14px;">
+                Este é um e-mail automático. Por favor, não responda a esta mensagem.
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

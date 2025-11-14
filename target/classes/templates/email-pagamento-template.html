@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notificação de Pagamento - Precisão</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(145deg, #ffe0e6 0%, #f8fafc 35%, #ffffff 100%);
+            padding: 30px 15px;
+            line-height: 1.6;
+        }
+
+        .email-container {
+            max-width: 650px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 45px rgba(237, 26, 59, 0.12), 0 2px 8px rgba(237, 26, 59, 0.08);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #ED1A3B 0%, #c41531 100%);
+            padding: 40px 30px 35px;
+            text-align: center;
+            color: #ffffff;
+            position: relative;
+        }
+
+        .header .logo {
+            max-width: 100px;
+            height: auto;
+            margin-bottom: 15px;
+            background: transparent;
+        }
+
+        .header h1 {
+            font-size: 26px;
+            font-weight: 600;
+            margin: 0;
+            letter-spacing: 0.3px;
+        }
+
+        .header .criado-por {
+            font-size: 14px;
+            font-weight: 400;
+            margin-top: 10px;
+            opacity: 0.95;
+            font-style: italic;
+        }
+
+        .valor-destaque {
+            background: linear-gradient(135deg, #ED1A3B 0%, #c41531 100%);
+            padding: 30px;
+            text-align: center;
+            color: #ffffff;
+        }
+
+        .valor-destaque .label {
+            font-size: 15px;
+            opacity: 0.95;
+            margin-bottom: 10px;
+            font-weight: 400;
+        }
+
+        .valor-destaque .valor {
+            font-size: 42px;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: 1px;
+        }
+
+        .card-info {
+            margin: 30px;
+            padding: 30px;
+            background: linear-gradient(145deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 16px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 4px 12px rgba(237, 26, 59, 0.08);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 18px;
+        }
+
+        .info-section {
+            padding-bottom: 18px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .info-section:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #ED1A3B;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            background: linear-gradient(135deg, #ED1A3B 0%, #c41531 100%);
+            border-radius: 2px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 8px 0;
+            gap: 15px;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #495057;
+            font-size: 14px;
+            min-width: 140px;
+            flex-shrink: 0;
+        }
+
+        .info-value {
+            color: #212529;
+            font-size: 14px;
+            text-align: right;
+            word-break: break-word;
+            font-weight: 500;
+        }
+
+        .footer {
+            background: linear-gradient(135deg, #ED1A3B 0%, #c41531 100%);
+            padding: 25px 30px;
+            text-align: center;
+            color: #ffffff;
+        }
+
+        .footer p {
+            color: #ffffff;
+            font-size: 12px;
+            margin: 5px 0;
+            opacity: 0.95;
+        }
+
+        .footer strong {
+            font-weight: 600;
+        }
+
+        @media only screen and (max-width: 600px) {
+            body {
+                padding: 15px 10px;
+            }
+
+            .email-container {
+                border-radius: 16px;
+            }
+
+            .header {
+                padding: 30px 20px 25px;
+            }
+
+            .header h1 {
+                font-size: 22px;
+            }
+
+            .valor-destaque {
+                padding: 25px 20px;
+            }
+
+            .valor-destaque .valor {
+                font-size: 34px;
+            }
+
+            .card-info {
+                margin: 20px 15px;
+                padding: 20px;
+            }
+
+            .info-item {
+                flex-direction: column;
+                gap: 5px;
+                padding: 10px 0;
+            }
+
+            .info-label {
+                min-width: auto;
+            }
+
+            .info-value {
+                text-align: left;
+                margin-top: 3px;
+            }
+
+            .footer {
+                padding: 20px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header com Logo -->
+        <div class="header">
+            <img src="cid:logo" alt="Precisão" class="logo" />
+            <h1>Recibo Prolabore</h1>
+            <div class="criado-por">Criado por: {{NOME_DESTINATARIO}}</div>
+        </div>
+
+        <!-- Valor do Pagamento -->
+        <div class="valor-destaque">
+            <div class="label">Valor do Pagamento</div>
+            <div class="valor">{{VALOR_PAGAMENTO}}</div>
+        </div>
+
+        <!-- Card único com todas as informações -->
+        <div class="card-info">
+            <div class="info-grid">
+                <!-- Dados do Empreendimento -->
+                <div class="info-section">
+                    <div class="section-title">Dados do Empreendimento</div>
+                    <div class="info-item">
+                        <span class="info-label">Código:</span>
+                        <span class="info-value">{{CODIGO_EMPREENDIMENTO}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Nome:</span>
+                        <span class="info-value">{{NOME_EMPREENDIMENTO}}</span>
+                    </div>
+                </div>
+
+                <!-- Dados do Pagamento -->
+                <div class="info-section">
+                    <div class="section-title">Dados do Pagamento</div>
+                    <div class="info-item">
+                        <span class="info-label">Vencimento:</span>
+                        <span class="info-value">{{VENCIMENTO}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Descrição:</span>
+                        <span class="info-value">{{DESCRICAO_PAGAMENTO}}</span>
+                    </div>
+                </div>
+
+                <!-- Dados do Fornecedor -->
+                <div class="info-section">
+                    <div class="section-title">Dados do Fornecedor</div>
+                    <div class="info-item">
+                        <span class="info-label">Documento:</span>
+                        <span class="info-value">{{DOCUMENTO_FORNECEDOR}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Nome:</span>
+                        <span class="info-value">{{NOME_FORNECEDOR}}</span>
+                    </div>
+                </div>
+
+                <!-- Dados do Favorecido -->
+                <div class="info-section">
+                    <div class="section-title">Dados do Favorecido</div>
+                    <div class="info-item">
+                        <span class="info-label">Documento:</span>
+                        <span class="info-value">{{DOCUMENTO_FAVORECIDO}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Nome:</span>
+                        <span class="info-value">{{NOME_FAVORECIDO}}</span>
+                    </div>
+                </div>
+
+                <!-- Dados Bancários -->
+                <div class="info-section">
+                    <div class="section-title">Dados Bancários</div>
+                    <div class="info-item">
+                        <span class="info-label">Banco:</span>
+                        <span class="info-value">{{NUMERO_BANCO}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Agência:</span>
+                        <span class="info-value">{{AGENCIA_FORMATADA}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Conta:</span>
+                        <span class="info-value">{{CONTA_FORMATADA}}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Chave PIX:</span>
+                        <span class="info-value">{{CHAVE_PIX}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p style="margin-top: 12px; opacity: 0.9;">
+                <strong>Sistema de Pagamentos - Precisão Administradora</strong>
+            </p>
+            <p style="opacity: 0.85;">Este é um e-mail automático. Por favor, não responda.</p>
+        </div>
+    </div>
+</body>
+</html>
+
