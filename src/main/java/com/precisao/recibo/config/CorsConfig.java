@@ -8,7 +8,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
 import java.util.Arrays;
-import java.util.List;
 
 @Configuration
 public class CorsConfig {
@@ -20,13 +19,8 @@ public class CorsConfig {
     public CorsFilter corsFilter() {
         CorsConfiguration corsConfiguration = new CorsConfiguration();
         
-        // Permite requisições do frontend Angular (local e produção)
-        List<String> allowedOrigins = Arrays.asList(
-            "http://localhost:4200",
-            "https://precisao-recibo-frontend.onrender.com",
-            frontendUrl
-        );
-        corsConfiguration.setAllowedOrigins(allowedOrigins);
+        // TEMPORÁRIO: Permite TODAS as origens para teste
+        corsConfiguration.setAllowedOriginPatterns(Arrays.asList("*"));
         
         // Permite todos os métodos HTTP
         corsConfiguration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
@@ -34,8 +28,8 @@ public class CorsConfig {
         // Permite todos os headers
         corsConfiguration.setAllowedHeaders(Arrays.asList("*"));
         
-        // Permite credenciais
-        corsConfiguration.setAllowCredentials(true);
+        // NÃO permite credenciais quando usa * (causa erro)
+        corsConfiguration.setAllowCredentials(false);
         
         // Tempo de cache da configuração CORS (1 hora)
         corsConfiguration.setMaxAge(3600L);
