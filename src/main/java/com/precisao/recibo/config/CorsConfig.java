@@ -1,6 +1,5 @@
 package com.precisao.recibo.config;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -12,33 +11,22 @@ import java.util.Arrays;
 @Configuration
 public class CorsConfig {
 
-    @Value("${app.frontend.url:http://localhost:4200}")
-    private String frontendUrl;
-
     @Bean
     public CorsFilter corsFilter() {
-        CorsConfiguration corsConfiguration = new CorsConfiguration();
-        
-        // TEMPORÁRIO: Permite TODAS as origens para teste
-        corsConfiguration.setAllowedOriginPatterns(Arrays.asList("*"));
-        
-        // Permite todos os métodos HTTP
-        corsConfiguration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        
-        // Permite todos os headers
-        corsConfiguration.setAllowedHeaders(Arrays.asList("*"));
-        
-        // NÃO permite credenciais quando usa * (causa erro)
-        corsConfiguration.setAllowCredentials(false);
-        
-        // Tempo de cache da configuração CORS (1 hora)
-        corsConfiguration.setMaxAge(3600L);
-        
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", corsConfiguration);
+        CorsConfiguration config = new CorsConfiguration();
+        
+        // Permite apenas localhost:4200 em desenvolvimento
+        config.setAllowedOrigins(Arrays.asList("http://localhost:4200"));
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(Arrays.asList("*"));
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+        
+        // Aplica a configuração para todos os endpoints
+        source.registerCorsConfiguration("/**", config);
         
         return new CorsFilter(source);
     }
 }
-
 

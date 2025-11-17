@@ -76,6 +76,13 @@
 		<artifactId>spring-boot-starter-mail</artifactId>
 	</dependency>
 
+	<!-- AWS SDK para SES -->
+	<dependency>
+		<groupId>software.amazon.awssdk</groupId>
+		<artifactId>ses</artifactId>
+		<version>2.20.162</version>
+	</dependency>
+
 	<!-- OpenHTMLtoPDF para converter HTML em PDF -->
 	<dependency>
 		<groupId>com.openhtmltopdf</groupId>

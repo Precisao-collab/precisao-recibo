@@ -12,15 +12,13 @@ services:
       - key: SPRING_MAIL_PORT
         value: 587
       - key: SPRING_MAIL_USERNAME
-        sync: false  # Defina manualmente no Render Dashboard
+        sync: false  # AWS Access Key ID de um usuário IAM criado especificamente para este serviço
       - key: SPRING_MAIL_PASSWORD
-        sync: false  # Defina manualmente no Render Dashboard
+        sync: false  # AWS Secret Access Key do usuário IAM (NÃO use credenciais SMTP aqui)
       - key: APP_EMAIL_REMETENTE
         value: lud.galvao@precisaoadm.com.br
       - key: APP_EMAIL_NOME_REMETENTE
         value: Sistema de Recibos - Precisao
-      - key: APP_FRONTEND_URL
-        sync: false  # Defina manualmente após criar o frontend
       - key: APP_BACKEND_URL
         value: https://precisao-recibo.onrender.com
       - key: JAVA_TOOL_OPTIONS

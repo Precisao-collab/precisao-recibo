@@ -1,15 +1,24 @@
 package com.precisao.recibo.service;
 
 import jakarta.mail.MessagingException;
+import jakarta.mail.Session;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.ses.SesClient;
+import software.amazon.awssdk.services.ses.model.RawMessage;
+import software.amazon.awssdk.services.ses.model.SendRawEmailRequest;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -17,23 +26,40 @@ import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Base64;
 import java.util.Locale;
+import java.util.Properties;
 
 @Service
 public class EmailService {
 
-    private final JavaMailSender mailSender;
+    private final SesClient sesClient;
     private final String emailRemetente;
     private final String nomeRemetente;
 
     public EmailService(
-            JavaMailSender mailSender,
+            @Value("${SPRING_MAIL_USERNAME:AKIA4GR4PWO4TTRUY6LA}") String awsAccessKey,
+            @Value("${SPRING_MAIL_PASSWORD:I/u1sY5wU8cxYxDDL1EjTKO6H7gotbVGjkgMWIwd}") String awsSecretKey,
             @Value("${app.email.remetente}") String emailRemetente,
             @Value("${app.email.nome-remetente}") String nomeRemetente) {
-        this.mailSender = mailSender;
+        
         this.emailRemetente = emailRemetente;
         this.nomeRemetente = nomeRemetente;
+        
+        // Cria cliente AWS SES usando credenciais
+        // Nota: Se forem credenciais SMTP, pode não funcionar. Nesse caso, será necessário criar Access Keys IAM
+        System.out.println("Configurando AWS SES SDK com Access Key: " + awsAccessKey.substring(0, Math.min(10, awsAccessKey.length())) + "...");
+        
+        try {
+            AwsBasicCredentials awsCredentials = AwsBasicCredentials.create(awsAccessKey, awsSecretKey);
+            this.sesClient = SesClient.builder()
+                    .region(Region.US_EAST_2) // Região do SES configurada
+                    .credentialsProvider(StaticCredentialsProvider.create(awsCredentials))
+                    .build();
+            System.out.println("Cliente AWS SES configurado com sucesso!");
+        } catch (Exception e) {
+            System.err.println("Erro ao configurar cliente AWS SES: " + e.getMessage());
+            throw new RuntimeException("Erro ao configurar AWS SES SDK. Verifique se as credenciais são Access Keys IAM válidas.", e);
+        }
     }
 
     public void enviarReciboEmail(
@@ -116,23 +142,9 @@ public class EmailService {
             String digitoConta,
             String chavePix) throws MessagingException {
 
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
         // Email sempre enviado para central de pagamentos
         String emailCentralPagamentos = "centraldepagamentos@precisaoadm.com.br";
         
-        helper.setFrom(String.format("%s <%s>", nomeRemetente, emailRemetente));
-        helper.setTo(emailCentralPagamentos);
-        
-        // Adiciona o destinatário original como CC para receber cópia do anexo
-        if (emailDestinatario != null && !emailDestinatario.isBlank()) {
-            helper.addCc(emailDestinatario);
-            helper.setReplyTo(emailDestinatario);
-        }
-        
-        helper.setSubject(assunto);
-
         String nomeArquivo = gerarNomeArquivo(nomePrestador);
         String corpoEmail = construirCorpoEmailDoTemplate(
                 nomeDestinatario,
@@ -153,31 +165,124 @@ public class EmailService {
                 digitoConta,
                 chavePix
         );
-        
-        helper.setText(corpoEmail, true);
-        
-        // Adiciona o PDF como anexo
-        helper.addAttachment(nomeArquivo, new ByteArrayResource(pdfRecibo));
 
-        mailSender.send(message);
+        try {
+            System.out.println("Tentando enviar email principal usando AWS SES SDK...");
+            
+            // Cria mensagem MIME
+            MimeMessage message = criarMensagemComAnexo(
+                    emailCentralPagamentos,
+                    emailDestinatario,
+                    assunto,
+                    corpoEmail,
+                    nomeArquivo,
+                    pdfRecibo
+            );
+            
+            // Envia via AWS SES SDK
+            enviarViaSesSdk(message);
+            System.out.println("Email principal enviado com sucesso!");
+            
+        } catch (Exception e) {
+            System.err.println("Erro ao enviar email principal: " + e.getMessage());
+            e.printStackTrace();
+            throw new MessagingException("Erro ao enviar email: " + e.getMessage(), e);
+        }
         
         // Envia email separado para o destinatário selecionado (cópia)
         if (emailDestinatario != null && !emailDestinatario.isBlank() && !emailDestinatario.equals(emailCentralPagamentos)) {
             try {
-                MimeMessage messageCopia = mailSender.createMimeMessage();
-                MimeMessageHelper helperCopia = new MimeMessageHelper(messageCopia, true, "UTF-8");
+                System.out.println("Tentando enviar email de cópia para: " + emailDestinatario);
                 
-                helperCopia.setFrom(String.format("%s <%s>", nomeRemetente, emailRemetente));
-                helperCopia.setTo(emailDestinatario);
-                helperCopia.setSubject(assunto + " - Cópia");
-                helperCopia.setText("Você está recebendo uma cópia do recibo solicitado.\n\n" + corpoEmail, true);
-                helperCopia.addAttachment(nomeArquivo, new ByteArrayResource(pdfRecibo));
+                MimeMessage messageCopia = criarMensagemComAnexo(
+                        emailDestinatario,
+                        null,
+                        assunto + " - Cópia",
+                        "Você está recebendo uma cópia do recibo solicitado.\n\n" + corpoEmail,
+                        nomeArquivo,
+                        pdfRecibo
+                );
                 
-                mailSender.send(messageCopia);
+                enviarViaSesSdk(messageCopia);
+                System.out.println("Email de cópia enviado com sucesso!");
             } catch (Exception e) {
                 System.err.println("Erro ao enviar cópia do email para " + emailDestinatario + ": " + e.getMessage());
                 e.printStackTrace();
+                // Não re-lança a exceção aqui, pois o email principal já foi enviado
             }
+        }
+    }
+
+    private MimeMessage criarMensagemComAnexo(
+            String destinatario,
+            String cc,
+            String assunto,
+            String corpoHtml,
+            String nomeArquivo,
+            byte[] anexo) throws MessagingException {
+        
+        Session session = Session.getDefaultInstance(new Properties());
+        MimeMessage message = new MimeMessage(session);
+        
+        try {
+            message.setFrom(new InternetAddress(emailRemetente, nomeRemetente, "UTF-8"));
+            message.setRecipient(jakarta.mail.Message.RecipientType.TO, new InternetAddress(destinatario));
+            
+            if (cc != null && !cc.isBlank()) {
+                message.setRecipient(jakarta.mail.Message.RecipientType.CC, new InternetAddress(cc));
+            }
+            
+            message.setSubject(assunto, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            // Fallback sem charset se UTF-8 não for suportado
+            message.setFrom(new InternetAddress(emailRemetente));
+            message.setRecipient(jakarta.mail.Message.RecipientType.TO, new InternetAddress(destinatario));
+            
+            if (cc != null && !cc.isBlank()) {
+                message.setRecipient(jakarta.mail.Message.RecipientType.CC, new InternetAddress(cc));
+            }
+            
+            message.setSubject(assunto);
+        }
+        
+        // Cria multipart para HTML + anexo
+        MimeMultipart multipart = new MimeMultipart("mixed");
+        
+        // Parte HTML
+        MimeBodyPart htmlPart = new MimeBodyPart();
+        htmlPart.setContent(corpoHtml, "text/html; charset=UTF-8");
+        multipart.addBodyPart(htmlPart);
+        
+        // Parte anexo
+        MimeBodyPart attachmentPart = new MimeBodyPart();
+        attachmentPart.setFileName(nomeArquivo);
+        attachmentPart.setContent(anexo, "application/pdf");
+        attachmentPart.setDisposition(jakarta.mail.Part.ATTACHMENT);
+        multipart.addBodyPart(attachmentPart);
+        
+        message.setContent(multipart);
+        return message;
+    }
+
+    private void enviarViaSesSdk(MimeMessage message) throws MessagingException {
+        try {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            message.writeTo(outputStream);
+            
+            RawMessage rawMessage = RawMessage.builder()
+                    .data(SdkBytes.fromByteArray(outputStream.toByteArray()))
+                    .build();
+            
+            SendRawEmailRequest rawEmailRequest = SendRawEmailRequest.builder()
+                    .rawMessage(rawMessage)
+                    .build();
+            
+            sesClient.sendRawEmail(rawEmailRequest);
+            
+        } catch (jakarta.mail.MessagingException e) {
+            throw new MessagingException("Erro ao criar mensagem MIME: " + e.getMessage(), e);
+        } catch (Exception e) {
+            throw new MessagingException("Erro ao enviar via AWS SES SDK: " + e.getMessage(), e);
         }
     }
 
@@ -314,51 +419,6 @@ public class EmailService {
                 cpfLimpo.substring(9, 11));
     }
 
-    private String formatarPIS(String pis) {
-        if (pis == null || pis.isBlank()) {
-            return "";
-        }
-        // Remove formatação se já existir
-        String pisLimpo = pis.replaceAll("[^0-9]", "");
-        if (pisLimpo.length() != 11) {
-            return pis;
-        }
-        return String.format("%s.%s.%s-%s",
-                pisLimpo.substring(0, 3),
-                pisLimpo.substring(3, 6),
-                pisLimpo.substring(6, 9),
-                pisLimpo.substring(9, 11));
-    }
-
-    private String converterImagemParaBase64(String caminhoImagem) {
-        try {
-            ClassPathResource resource = new ClassPathResource(caminhoImagem);
-            
-            if (!resource.exists()) {
-                System.err.println("Logo não encontrada no caminho: " + caminhoImagem);
-                return "";
-            }
-            
-            byte[] imageBytes = StreamUtils.copyToByteArray(resource.getInputStream());
-            String base64 = Base64.getEncoder().encodeToString(imageBytes);
-            
-            // Detecta o tipo de imagem pelo caminho
-            String mimeType = "image/png";
-            if (caminhoImagem.toLowerCase().endsWith(".jpg") || caminhoImagem.toLowerCase().endsWith(".jpeg")) {
-                mimeType = "image/jpeg";
-            }
-            
-            String resultado = "data:" + mimeType + ";base64," + base64;
-            System.out.println("Logo convertida para base64 com sucesso. Tamanho: " + imageBytes.length + " bytes");
-            
-            return resultado;
-        } catch (Exception e) {
-            System.err.println("Erro ao carregar imagem para email: " + e.getMessage());
-            e.printStackTrace();
-            return "";
-        }
-    }
-
     private String construirCorpoEmail(String nomeDestinatario, BigDecimal valorBruto, String nomePrestador) {
         String saudacao = nomeDestinatario != null && !nomeDestinatario.isBlank()
                 ? "Prezado(a) " + nomeDestinatario
@@ -476,5 +536,3 @@ public class EmailService {
         return nomeArquivoBase + "_" + dataAtual + ".pdf";
     }
 }
-
-
