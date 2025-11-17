@@ -339,6 +339,7 @@ public class PdfGeracaoService {
             // Cria uma URL com os dados codificados que pode ser aberta no navegador
             // Formato: http://localhost:8080/recibos/qr-info?gerente=NOME&data=DATA&hora=HORA
             try {
+                System.out.println("Gerando QR Code. Backend URL: " + backendUrl);
                 String nomeGerenteEncoded = java.net.URLEncoder.encode(nomeGerente, "UTF-8");
                 String dataEncoded = java.net.URLEncoder.encode(dataAtual, "UTF-8");
                 String horaEncoded = java.net.URLEncoder.encode(
@@ -357,7 +358,9 @@ public class PdfGeracaoService {
                 );
                 
                 qrCodeBase64 = gerarQRCodeBase64(qrCodeData, 200, 200);
+                System.out.println("QR Code gerado com sucesso");
             } catch (java.io.UnsupportedEncodingException e) {
+                System.err.println("Erro ao codificar URL do QR Code: " + e.getMessage());
                 String qrCodeData = String.format(
                     "{\"tipo\":\"recibo-prolabore\",\"gerente\":\"%s\",\"data\":\"%s\",\"hora\":\"%s\"}",
                     nomeGerente.replace("\"", "\\\""),
@@ -367,6 +370,12 @@ public class PdfGeracaoService {
                     )
                 );
                 qrCodeBase64 = gerarQRCodeBase64(qrCodeData, 200, 200);
+                System.out.println("QR Code gerado com sucesso (JSON)");
+            } catch (Exception e) {
+                System.err.println("Erro ao gerar QR Code: " + e.getMessage());
+                e.printStackTrace();
+                // Continua sem QR Code se houver erro
+                qrCodeBase64 = "";
             }
         }
         dados.put("QR_CODE_BASE64", qrCodeBase64);

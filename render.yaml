@@ -21,6 +21,8 @@ services:
         value: Sistema de Recibos - Precisao
       - key: APP_FRONTEND_URL
         sync: false  # Defina manualmente após criar o frontend
+      - key: APP_BACKEND_URL
+        value: https://precisao-recibo.onrender.com
       - key: JAVA_TOOL_OPTIONS
         value: "-Xmx512m -Xms256m"
     healthCheckPath: /recibos

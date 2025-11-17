@@ -63,11 +63,18 @@ public class ReciboController {
         Map<String, Object> response = new HashMap<>();
         
         try {
+            System.out.println("=== INÍCIO DO ENVIO DE EMAIL ===");
+            System.out.println("Destinatário: " + request.emailDestinatario());
+            System.out.println("Nome Destinatário: " + request.nomeDestinatario());
+            
             // Captura o IP do cliente
             String ipCliente = obterIpCliente(httpRequest);
+            System.out.println("IP Cliente: " + ipCliente);
             
             // Gera o PDF do recibo com QR Code
+            System.out.println("Gerando PDF...");
             byte[] pdfBytes = pdfGeracaoService.gerarReciboPDF(request.dadosRecibo(), request.nomeDestinatario(), ipCliente);
+            System.out.println("PDF gerado com sucesso. Tamanho: " + pdfBytes.length + " bytes");
             
             // Calcula os valores
             var dadosRecibo = request.dadosRecibo();
@@ -105,6 +112,7 @@ public class ReciboController {
             String chavePixFormatada = formatarChavePix(dadosRecibo.tipoChavePix(), dadosRecibo.chavePix());
             
             // Envia o email com o PDF anexado usando o novo template HTML de pagamento
+            System.out.println("Enviando email...");
             emailService.enviarReciboEmailCompleto(
                     request.emailDestinatario(),
                     request.nomeDestinatario(),
@@ -128,6 +136,9 @@ public class ReciboController {
                     chavePixFormatada
             );
             
+            System.out.println("Email enviado com sucesso!");
+            System.out.println("=== FIM DO ENVIO DE EMAIL ===");
+            
             response.put("sucesso", true);
             response.put("mensagem", "Recibo enviado com sucesso para centraldepagamentos@precisaoadm.com.br (solicitado por " + request.nomeDestinatario() + ")");
             response.put("emailDestinatario", "centraldepagamentos@precisaoadm.com.br");
@@ -143,8 +154,22 @@ public class ReciboController {
             
         } catch (Exception e) {
             e.printStackTrace();
+            System.err.println("ERRO ao enviar recibo:");
+            System.err.println("Mensagem: " + e.getMessage());
+            System.err.println("Causa: " + (e.getCause() != null ? e.getCause().getMessage() : "N/A"));
+            e.printStackTrace();
+            
+            String mensagemErro = "Erro ao enviar recibo";
+            if (e.getMessage() != null) {
+                mensagemErro += ": " + e.getMessage();
+            }
+            
             response.put("sucesso", false);
-            response.put("mensagem", "Erro ao enviar recibo: " + e.getMessage());
+            response.put("mensagem", mensagemErro);
+            response.put("erro", e.getClass().getSimpleName());
+            if (e.getCause() != null) {
+                response.put("causa", e.getCause().getMessage());
+            }
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
