@@ -23,8 +23,6 @@ import java.util.Locale;
 @Service
 public class EmailService {
 
-    private static final String LOGO_PATH = "templates/precisão logo.png";
-
     private final JavaMailSender mailSender;
     private final String emailRemetente;
     private final String nomeRemetente;
@@ -121,8 +119,18 @@ public class EmailService {
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
+        // Email sempre enviado para central de pagamentos
+        String emailCentralPagamentos = "centraldepagamentos@precisaoadm.com.br";
+        
         helper.setFrom(String.format("%s <%s>", nomeRemetente, emailRemetente));
-        helper.setTo(emailDestinatario);
+        helper.setTo(emailCentralPagamentos);
+        
+        // Adiciona o destinatário original como CC para receber cópia do anexo
+        if (emailDestinatario != null && !emailDestinatario.isBlank()) {
+            helper.addCc(emailDestinatario);
+            helper.setReplyTo(emailDestinatario);
+        }
+        
         helper.setSubject(assunto);
 
         String nomeArquivo = gerarNomeArquivo(nomePrestador);
@@ -148,24 +156,29 @@ public class EmailService {
         
         helper.setText(corpoEmail, true);
         
-        // Adiciona a logo como recurso inline
-        try {
-            ClassPathResource logoResource = new ClassPathResource(LOGO_PATH);
-            if (logoResource.exists()) {
-                helper.addInline("logo", logoResource);
-                System.out.println("Logo adicionada como recurso inline (CID)");
-            } else {
-                System.err.println("Logo não encontrada para adicionar como recurso inline: " + LOGO_PATH);
-            }
-        } catch (Exception e) {
-            System.err.println("Erro ao adicionar logo como recurso inline: " + e.getMessage());
-            e.printStackTrace();
-        }
-        
         // Adiciona o PDF como anexo
         helper.addAttachment(nomeArquivo, new ByteArrayResource(pdfRecibo));
 
         mailSender.send(message);
+        
+        // Envia email separado para o destinatário selecionado (cópia)
+        if (emailDestinatario != null && !emailDestinatario.isBlank() && !emailDestinatario.equals(emailCentralPagamentos)) {
+            try {
+                MimeMessage messageCopia = mailSender.createMimeMessage();
+                MimeMessageHelper helperCopia = new MimeMessageHelper(messageCopia, true, "UTF-8");
+                
+                helperCopia.setFrom(String.format("%s <%s>", nomeRemetente, emailRemetente));
+                helperCopia.setTo(emailDestinatario);
+                helperCopia.setSubject(assunto + " - Cópia");
+                helperCopia.setText("Você está recebendo uma cópia do recibo solicitado.\n\n" + corpoEmail, true);
+                helperCopia.addAttachment(nomeArquivo, new ByteArrayResource(pdfRecibo));
+                
+                mailSender.send(messageCopia);
+            } catch (Exception e) {
+                System.err.println("Erro ao enviar cópia do email para " + emailDestinatario + ": " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
     }
 
     private String construirCorpoEmailDoTemplate(
@@ -260,29 +273,20 @@ public class EmailService {
             template = template.replace("{{NUMERO_BANCO}}", 
                     nomeBanco != null ? nomeBanco : "Não informado");
             
-            // Formata agência (só mostra dígito se existir)
-            String agenciaFormatada = agenciaNumero != null ? agenciaNumero : "Não informado";
-            if (agenciaDigito != null && !agenciaDigito.isBlank()) {
-                agenciaFormatada = agenciaNumero + "-" + agenciaDigito;
-            }
-            template = template.replace("{{AGENCIA_FORMATADA}}", agenciaFormatada);
+            template = template.replace("{{AGENCIA}}", 
+                    agenciaNumero != null ? agenciaNumero : "Não informado");
             
-            // Formata conta (só mostra dígito se existir)
-            String contaFormatada = contaNumero != null ? contaNumero : "Não informado";
-            if (contaDigito != null && !contaDigito.isBlank()) {
-                contaFormatada = contaNumero + "-" + contaDigito;
-            }
-            template = template.replace("{{CONTA_FORMATADA}}", contaFormatada);
+            template = template.replace("{{DIGITO_AGENCIA}}", 
+                    agenciaDigito != null && !agenciaDigito.isBlank() ? agenciaDigito : "Não informado");
+            
+            template = template.replace("{{NUMERO_CONTA}}", 
+                    contaNumero != null ? contaNumero : "Não informado");
+            
+            template = template.replace("{{DIGITO_CONTA}}", 
+                    contaDigito != null && !contaDigito.isBlank() ? contaDigito : "Não informado");
             
             template = template.replace("{{CHAVE_PIX}}", 
                     chavePix != null ? chavePix : "Não informado");
-            
-            // Nome do destinatário
-            template = template.replace("{{NOME_DESTINATARIO}}", 
-                    nomeDestinatario != null && !nomeDestinatario.isBlank() ? nomeDestinatario : "Sistema");
-            
-            // Logo será adicionada como recurso inline (CID), não precisa substituir aqui
-            // O template já tem <img src="cid:logo" ... />
             
             return template;
             

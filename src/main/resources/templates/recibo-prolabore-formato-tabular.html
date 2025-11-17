@@ -146,10 +146,39 @@
         .no-border-top {
             border-top: none !important;
         }
+
+        .qr-code-container {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 100px;
+            height: 100px;
+            z-index: 1000;
+        }
+
+        .qr-code-container.hidden {
+            display: none;
+        }
+
+        .qr-code-container img {
+            width: 100px;
+            height: 100px;
+            max-width: 100px;
+            max-height: 100px;
+        }
+
+        .container {
+            position: relative;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- QR Code no canto superior direito -->
+        <div class="qr-code-container{{QR_CODE_STYLE}}">
+            <img src="{{QR_CODE_BASE64}}" alt="QR Code" />
+        </div>
+
         <!-- Cabeçalho Principal -->
         <div class="header">
             <div class="logo-container{{LOGO_STYLE}}">
@@ -170,13 +199,21 @@
         <!-- Nome e CNPJ -->
         <table>
             <tr>
-                <td style="width: 70%;">
+                <td style="width: 50%;">
                     <span class="label">Nome do Condomínio</span><br/>
                     <span class="value">{{NOME_CONDOMINIO}}</span>
                 </td>
-                <td style="width: 30%;">
+                <td style="width: 25%;">
                     <span class="label">CNPJ do Condomínio</span><br/>
                     <span class="value">{{CNPJ_CONDOMINIO}}</span>
+                </td>
+                <td style="width: 12.5%;">
+                    <span class="label">Grupo de Saldo</span><br/>
+                    <span class="value">{{GRUPO_DE_SALDO}}</span>
+                </td>
+                <td style="width: 12.5%;">
+                    <span class="label">Conta Grupo de Saldo</span><br/>
+                    <span class="value">{{CONTA_GRUPO_DE_SALDO}}</span>
                 </td>
             </tr>
         </table>
@@ -185,7 +222,7 @@
         <table>
             <tr>
                 <td colspan="2">
-                    <span class="label">Recebi da Empresa acima identificada, PRO-LABORE,</span>
+                    <span class="label">Recebi da Empresa acima identificada : </span>
                     <span class="valor-destaque">{{VALOR_LIQUIDO_FORMATADO}}</span>
                 </td>
             </tr>
@@ -195,8 +232,13 @@
         <table>
             <tr>
                 <td style="width: 45%; vertical-align: top;">
-                    <!-- Coluna Esquerda: Dados do Prestador -->
+                    <!-- Coluna Esquerda: Dados do Prestador e Bancários -->
                     <table style="border: none;">
+                        <tr>
+                            <td style="border: none; padding: 4px 0;">
+                                <span class="label">Nome Completo:</span> <span class="value">{{NOME_PRESTADOR}}</span>
+                            </td>
+                        </tr>
                         <tr>
                             <td style="border: none; padding: 4px 0;">
                                 <span class="label">Nº CPF:</span> <span class="value">{{CPF_PRESTADOR}}</span>
@@ -207,16 +249,36 @@
                                 <span class="label">Nº PIS/PASEP:</span> <span class="value">{{PIS}}</span>
                             </td>
                         </tr>
+                        <tr>
+                            <td style="border: none; padding: 4px 0;">
+                                <span class="label">Banco:</span> <span class="value">{{NOME_BANCO}}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border: none; padding: 4px 0;">
+                                <span class="label">Agência:</span> <span class="value">{{AGENCIA}}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border: none; padding: 4px 0;">
+                                <span class="label">Conta:</span> <span class="value">{{CONTA}}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border: none; padding: 4px 0;">
+                                <span class="label">Chave PIX:</span> <span class="value">{{CHAVE_PIX}}</span>
+                            </td>
+                        </tr>
                     </table>
                 </td>
                 <td style="width: 55%; vertical-align: top;">
                     <div class="especificacao-header">ESPECIFICAÇÃO:</div>
                     <table style="border: none; margin-top: 8px;">
                         <tr>
-                            <td style="border: none; padding: 2px 4px;">
-                                <span class="label">{{TIPO_SERVICO_PRESTADO}}</span>
+                            <td style="border: none; padding: 2px 4px; width: auto;">
+                                <span class="label" style="word-wrap: break-word; overflow-wrap: break-word; display: block;">{{TIPO_SERVICO_PRESTADO}}</span>
                             </td>
-                            <td style="border: none; padding: 2px 4px; text-align: right; width: 80px;">
+                            <td style="border: none; padding: 2px 4px; text-align: right; width: 80px; white-space: nowrap; vertical-align: top;">
                                 {{VALOR_BRUTO_NUMERICO}}
                             </td>
                         </tr>
@@ -233,6 +295,14 @@
                         <tr>
                             <td colspan="2" style="border: none; padding: 2px 4px; font-weight: bold;">
                                 DESCONTOS:
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="border: none; padding: 2px 4px;">
+                                <span class="label">Retenção por conta do condomínio</span>
+                            </td>
+                            <td style="border: none; padding: 2px 4px; text-align: right;">
+                                <span class="value">{{RETENCAO_VALOR}}</span>
                             </td>
                         </tr>
                         <tr>
@@ -256,7 +326,7 @@
             </tr>
         </table>
 
-        <!-- Dados Bancários -->
+        <!-- Localidade, Data e Assinatura -->
         <table>
             <tr>
                 <td style="width: 33%;">
@@ -274,33 +344,6 @@
             </tr>
         </table>
 
-        <!-- Dados Bancários e Nome Completo -->
-        <table>
-            <tr>
-                <td style="width: 20%;">
-                    <span class="label">Banco:</span><br/>
-                    <span class="value">{{NOME_BANCO}}</span>
-                </td>
-                <td style="width: 20%;">
-                    <span class="label">Agência:</span><br/>
-                    <span class="value">{{AGENCIA}}</span>
-                </td>
-                <td style="width: 25%;">
-                    <span class="label">Conta:</span><br/>
-                    <span class="value">{{CONTA}}</span>
-                </td>
-                <td style="width: 35%; text-align: center; vertical-align: middle;" rowspan="2">
-                    <span class="label">Nome Completo</span><br/>
-                    <span class="value">{{NOME_PRESTADOR}}</span><br/>
-                </td>
-            </tr>
-            <tr>
-                <td colspan="3">
-                    <span class="label">Chave PIX:</span>
-                    <span class="value">{{CHAVE_PIX}}</span>
-                </td>
-            </tr>
-        </table>
     </div>
 </body>
 </html>

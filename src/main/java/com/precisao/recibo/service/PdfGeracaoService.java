@@ -1,20 +1,25 @@
 package com.precisao.recibo.service;
 
+// Imports do ZXing serão carregados via reflection para evitar erro se não estiverem disponíveis
 import com.itextpdf.forms.PdfAcroForm;
 import com.itextpdf.forms.fields.PdfFormField;
 import com.itextpdf.kernel.pdf.PdfDocument;
 import com.itextpdf.kernel.pdf.PdfReader;
 import com.itextpdf.kernel.pdf.PdfWriter;
 import com.precisao.recibo.dto.ReciboRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.text.NumberFormat;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -29,26 +34,37 @@ public class PdfGeracaoService {
     private final ValorExtensoService valorExtensoService;
     private final CalculoService calculoService;
     private final HtmlToPdfService htmlToPdfService;
+    private final String backendUrl;
 
-    public PdfGeracaoService(ValorExtensoService valorExtensoService, CalculoService calculoService, HtmlToPdfService htmlToPdfService) {
+    public PdfGeracaoService(
+            ValorExtensoService valorExtensoService, 
+            CalculoService calculoService, 
+            HtmlToPdfService htmlToPdfService,
+            @Value("${app.backend.url:http://localhost:8080}") String backendUrl) {
         this.valorExtensoService = valorExtensoService;
         this.calculoService = calculoService;
         this.htmlToPdfService = htmlToPdfService;
+        this.backendUrl = backendUrl;
     }
 
     public byte[] gerarReciboPDF(ReciboRequest request) throws IOException {
         // Novo método usando HTML template
-        return gerarReciboPDFDeHTML(request);
+        return gerarReciboPDFDeHTML(request, null, null);
     }
 
-    public byte[] gerarReciboPDFDeHTML(ReciboRequest request) throws IOException {
+    public byte[] gerarReciboPDF(ReciboRequest request, String nomeGerente, String ipCliente) throws IOException {
+        // Novo método usando HTML template com QR Code
+        return gerarReciboPDFDeHTML(request, nomeGerente, ipCliente);
+    }
+
+    public byte[] gerarReciboPDFDeHTML(ReciboRequest request, String nomeGerente, String ipCliente) throws IOException {
         BigDecimal valorBruto = request.valorBruto();
         BigDecimal valorINSS = calcularINSSComTipo(request.valorBruto(), request.tipoImposto());
         BigDecimal valorLiquido = calculoService.calcularValorLiquido(valorBruto, valorINSS);
         String valorBrutoPorExtenso = valorExtensoService.converter(valorBruto);
         String valorLiquidoPorExtenso = valorExtensoService.converter(valorLiquido);
 
-        Map<String, String> dados = construirDadosParaHTML(request, valorBruto, valorINSS, valorLiquido, valorBrutoPorExtenso, valorLiquidoPorExtenso);
+        Map<String, String> dados = construirDadosParaHTML(request, valorBruto, valorINSS, valorLiquido, valorBrutoPorExtenso, valorLiquidoPorExtenso, nomeGerente, ipCliente);
         
         return htmlToPdfService.gerarPdfDeHtml(HTML_TEMPLATE_PATH, dados);
     }
@@ -131,7 +147,11 @@ public class PdfGeracaoService {
         String mesReferencia = java.time.LocalDate.now()
                 .format(java.time.format.DateTimeFormatter.ofPattern("MMMM/yyyy", Locale.of("pt", "BR")));
 
-        valores.put("condominio", request.condominio());
+        // Condomínio - Código + Nome
+        String condominioCompleto = request.codigoEmpreendimento() != null && !request.codigoEmpreendimento().isBlank()
+                ? request.codigoEmpreendimento() + " - " + request.condominio()
+                : request.condominio();
+        valores.put("condominio", condominioCompleto);
         valores.put("cnpj", formatarCNPJ(request.cnpjCondominio()));
         valores.put("valorbruto", formatarMoeda(valorBruto));
         valores.put("extenso", valorPorExtenso);
@@ -231,7 +251,9 @@ public class PdfGeracaoService {
                                                         BigDecimal valorINSS,
                                                         BigDecimal valorLiquido,
                                                         String valorBrutoPorExtenso,
-                                                        String valorLiquidoPorExtenso) {
+                                                        String valorLiquidoPorExtenso,
+                                                        String nomeGerente,
+                                                        String ipCliente) {
         Map<String, String> dados = new HashMap<>();
 
         // Data atual formatada (dd/MM/yyyy)
@@ -266,9 +288,14 @@ public class PdfGeracaoService {
         dados.put("LOCAL_EMISSAO", "Brasil");
         dados.put("LOCALIDADE", "Brasil");
 
-        // Condomínio
-        dados.put("NOME_CONDOMINIO", request.condominio());
+        // Condomínio - Código + Nome
+        String condominioCompleto = request.codigoEmpreendimento() != null && !request.codigoEmpreendimento().isBlank()
+                ? request.codigoEmpreendimento() + " - " + request.condominio()
+                : request.condominio();
+        dados.put("NOME_CONDOMINIO", condominioCompleto);
         dados.put("CNPJ_CONDOMINIO", formatarCNPJ(request.cnpjCondominio()));
+        dados.put("GRUPO_DE_SALDO", request.grupoDeSaldo() != null && !request.grupoDeSaldo().isBlank() ? request.grupoDeSaldo() : "");
+        dados.put("CONTA_GRUPO_DE_SALDO", request.contaGrupoDeSaldo() != null && !request.contaGrupoDeSaldo().isBlank() ? request.contaGrupoDeSaldo() : "");
 
         // Valores - Formatados com símbolo
         dados.put("VALOR_BRUTO", currencyFormat.format(valorBruto));
@@ -302,7 +329,98 @@ public class PdfGeracaoService {
         dados.put("DESCRICAO_SERVICO", request.descricaoServico() != null ? request.descricaoServico() : "");
         dados.put("TIPO_SERVICO_PRESTADO", request.descricaoServico() != null ? request.descricaoServico() : "");
 
+        // Retenção por conta do condomínio - sempre mostra, com "Sim" ou "Não"
+        String retencaoValor = (request.retencao() != null && request.retencao()) ? "Sim" : "Não";
+        dados.put("RETENCAO_VALOR", retencaoValor);
+
+        // QR Code com informações do gerente - formato URL com dados
+        String qrCodeBase64 = "";
+        if (nomeGerente != null && !nomeGerente.isBlank()) {
+            // Cria uma URL com os dados codificados que pode ser aberta no navegador
+            // Formato: http://localhost:8080/recibos/qr-info?gerente=NOME&data=DATA&hora=HORA
+            try {
+                String nomeGerenteEncoded = java.net.URLEncoder.encode(nomeGerente, "UTF-8");
+                String dataEncoded = java.net.URLEncoder.encode(dataAtual, "UTF-8");
+                String horaEncoded = java.net.URLEncoder.encode(
+                    java.time.LocalTime.now().format(
+                        java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss", Locale.of("pt", "BR"))
+                    ), "UTF-8");
+                
+                // Cria URL que pode ser aberta no navegador (usa URL configurada ou localhost)
+                String baseUrl = backendUrl.endsWith("/") ? backendUrl.substring(0, backendUrl.length() - 1) : backendUrl;
+                String qrCodeData = String.format(
+                    "%s/recibos/qr-info?gerente=%s&data=%s&hora=%s",
+                    baseUrl,
+                    nomeGerenteEncoded,
+                    dataEncoded,
+                    horaEncoded
+                );
+                
+                qrCodeBase64 = gerarQRCodeBase64(qrCodeData, 200, 200);
+            } catch (java.io.UnsupportedEncodingException e) {
+                String qrCodeData = String.format(
+                    "{\"tipo\":\"recibo-prolabore\",\"gerente\":\"%s\",\"data\":\"%s\",\"hora\":\"%s\"}",
+                    nomeGerente.replace("\"", "\\\""),
+                    dataAtual,
+                    java.time.LocalTime.now().format(
+                        java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss", Locale.of("pt", "BR"))
+                    )
+                );
+                qrCodeBase64 = gerarQRCodeBase64(qrCodeData, 200, 200);
+            }
+        }
+        dados.put("QR_CODE_BASE64", qrCodeBase64);
+        dados.put("QR_CODE_STYLE", qrCodeBase64.isEmpty() ? " hidden" : "");
+
         return dados;
+    }
+
+    private String gerarQRCodeBase64(String texto, int largura, int altura) {
+        try {
+            // Verifica se as classes do ZXing estão disponíveis
+            Class<?> encodeHintTypeClass = Class.forName("com.google.zxing.EncodeHintType");
+            Class<?> errorCorrectionLevelClass = Class.forName("com.google.zxing.qrcode.decoder.ErrorCorrectionLevel");
+            Class<?> qrCodeWriterClass = Class.forName("com.google.zxing.qrcode.QRCodeWriter");
+            Class<?> barcodeFormatClass = Class.forName("com.google.zxing.BarcodeFormat");
+            Class<?> matrixToImageWriterClass = Class.forName("com.google.zxing.client.j2se.MatrixToImageWriter");
+
+            @SuppressWarnings("unchecked")
+            Map<Object, Object> hints = new HashMap<>();
+            
+            Object errorCorrectionLevel = errorCorrectionLevelClass.getField("M").get(null);
+            Object charsetHint = encodeHintTypeClass.getField("CHARACTER_SET").get(null);
+            Object marginHint = encodeHintTypeClass.getField("MARGIN").get(null);
+            Object errorCorrectionHint = encodeHintTypeClass.getField("ERROR_CORRECTION").get(null);
+            
+            hints.put(errorCorrectionHint, errorCorrectionLevel);
+            hints.put(charsetHint, "UTF-8");
+            hints.put(marginHint, 1);
+
+            Object qrCodeWriter = qrCodeWriterClass.getDeclaredConstructor().newInstance();
+            Object qrCodeFormat = barcodeFormatClass.getField("QR_CODE").get(null);
+            
+            java.lang.reflect.Method encodeMethod = qrCodeWriterClass.getMethod("encode", String.class, 
+                Class.forName("com.google.zxing.BarcodeFormat"), int.class, int.class, Map.class);
+            Object bitMatrix = encodeMethod.invoke(qrCodeWriter, texto, qrCodeFormat, largura, altura, hints);
+
+            java.lang.reflect.Method toBufferedImageMethod = matrixToImageWriterClass.getMethod("toBufferedImage", 
+                Class.forName("com.google.zxing.common.BitMatrix"));
+            BufferedImage qrImage = (BufferedImage) toBufferedImageMethod.invoke(null, bitMatrix);
+            
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(qrImage, "PNG", baos);
+            byte[] imageBytes = baos.toByteArray();
+
+            String base64 = Base64.getEncoder().encodeToString(imageBytes);
+            return "data:image/png;base64," + base64;
+        } catch (ClassNotFoundException e) {
+            System.err.println("Biblioteca ZXing não encontrada. Execute 'mvn clean install' para baixar as dependências.");
+            return "";
+        } catch (Exception e) {
+            System.err.println("Erro ao gerar QR Code: " + e.getMessage());
+            e.printStackTrace();
+            return "";
+        }
     }
 
     private BigDecimal calcularINSSComTipo(BigDecimal valorBruto, String tipoImposto) {

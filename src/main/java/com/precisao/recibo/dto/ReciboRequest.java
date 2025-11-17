@@ -6,6 +6,8 @@ public record ReciboRequest(
         String condominio,
         String codigoEmpreendimento,
         String cnpjCondominio,
+        String grupoDeSaldo,
+        String contaGrupoDeSaldo,
         String pis,
         String codigoBanco,
         String nomeBanco,
@@ -17,7 +19,8 @@ public record ReciboRequest(
         String cpf,
         BigDecimal valorBruto,
         String descricaoServico,
-        String tipoImposto
+        String tipoImposto,
+        Boolean retencao
 ) {
 }
 
