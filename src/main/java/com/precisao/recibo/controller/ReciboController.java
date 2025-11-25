@@ -3,7 +3,6 @@ package com.precisao.recibo.controller;
 import com.precisao.recibo.dto.EnviarReciboEmailRequest;
 import com.precisao.recibo.dto.ReciboRequest;
 import com.precisao.recibo.service.CalculoService;
-import com.precisao.recibo.service.EmailService;
 import com.precisao.recibo.service.PdfGeracaoService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.io.ByteArrayResource;
@@ -27,13 +26,16 @@ import java.util.Map;
 public class ReciboController {
 
     private final PdfGeracaoService pdfGeracaoService;
-    private final EmailService emailService;
     private final CalculoService calculoService;
+    private final com.precisao.recibo.service.ReciboProcessamentoService reciboProcessamentoService;
 
-    public ReciboController(PdfGeracaoService pdfGeracaoService, EmailService emailService, CalculoService calculoService) {
+    public ReciboController(
+            PdfGeracaoService pdfGeracaoService,
+            CalculoService calculoService,
+            com.precisao.recibo.service.ReciboProcessamentoService reciboProcessamentoService) {
         this.pdfGeracaoService = pdfGeracaoService;
-        this.emailService = emailService;
         this.calculoService = calculoService;
+        this.reciboProcessamentoService = reciboProcessamentoService;
     }
 
     @PostMapping(produces = MediaType.APPLICATION_PDF_VALUE)
@@ -63,7 +65,7 @@ public class ReciboController {
         Map<String, Object> response = new HashMap<>();
         
         try {
-            System.out.println("=== INÍCIO DO ENVIO DE EMAIL ===");
+            System.out.println("=== INÍCIO DA REQUISIÇÃO ===");
             System.out.println("Destinatário: " + request.emailDestinatario());
             System.out.println("Nome Destinatário: " + request.nomeDestinatario());
             
@@ -71,8 +73,10 @@ public class ReciboController {
             String ipCliente = obterIpCliente(httpRequest);
             System.out.println("IP Cliente: " + ipCliente);
             
-            // Calcula os valores
+            // Validação rápida dos dados
             var dadosRecibo = request.dadosRecibo();
+            
+            // Calcula os valores para validação
             var valorBruto = dadosRecibo.valorBruto();
             var valorInss = calcularINSSComTipo(valorBruto, dadosRecibo.tipoImposto());
             var valorLiquido = calculoService.calcularValorLiquido(valorBruto, valorInss);
@@ -82,8 +86,15 @@ public class ReciboController {
             if (dadosRecibo.parcelas() != null && !dadosRecibo.parcelas().isBlank()) {
                 try {
                     numeroParcelas = Integer.parseInt(dadosRecibo.parcelas());
+                    if (numeroParcelas < 1 || numeroParcelas > 12) {
+                        response.put("sucesso", false);
+                        response.put("mensagem", "Número de parcelas deve estar entre 1 e 12");
+                        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+                    }
                 } catch (NumberFormatException e) {
-                    System.err.println("Erro ao parsear número de parcelas: " + dadosRecibo.parcelas() + ". Usando padrão: 1");
+                    response.put("sucesso", false);
+                    response.put("mensagem", "Número de parcelas inválido");
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
                 }
             }
             
@@ -97,104 +108,27 @@ public class ReciboController {
                 }
             }
             
-            // Gera múltiplos PDFs baseado no número de parcelas
-            System.out.println("Gerando " + numeroParcelas + " PDF(s)...");
-            java.util.Map<String, byte[]> pdfsRecibos = new java.util.LinkedHashMap<>();
-            
-            for (int i = 0; i < numeroParcelas; i++) {
-                // Calcula a data de vencimento para esta parcela (incrementa meses)
-                java.time.LocalDate dataVencimento = dataBase.plusMonths(i);
-                String dataVencimentoStr = dataVencimento.format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE);
-                
-                // Gera o PDF do recibo com QR Code, data específica e número da parcela
-                byte[] pdfBytes = pdfGeracaoService.gerarReciboPDF(
-                        dadosRecibo, 
-                        request.nomeDestinatario(), 
-                        ipCliente,
-                        dataVencimentoStr,
-                        i + 1 // número da parcela (1-indexed)
-                );
-                
-                // Gera nome do arquivo com número da parcela
-                String nomeArquivo = gerarNomeArquivoComParcela(dadosRecibo.nomePrestador(), i + 1, numeroParcelas, dataVencimento);
-                pdfsRecibos.put(nomeArquivo, pdfBytes);
-                System.out.println("PDF " + (i + 1) + "/" + numeroParcelas + " gerado com sucesso. Tamanho: " + pdfBytes.length + " bytes");
-            }
-            
-            // Extrai dígitos da conta e agência (se fornecidos)
-            String agenciaNumero = null;
-            String agenciaDigito = null;
-            if (dadosRecibo.agencia() != null && !dadosRecibo.agencia().isBlank()) {
-                if (dadosRecibo.agencia().contains("-")) {
-                    String[] partes = dadosRecibo.agencia().split("-");
-                    agenciaNumero = partes[0];
-                    if (partes.length > 1) {
-                        agenciaDigito = partes[1];
-                    }
-                } else {
-                    agenciaNumero = dadosRecibo.agencia();
-                }
-            }
-            
-            String contaNumero = null;
-            String contaDigito = null;
-            if (dadosRecibo.conta() != null && !dadosRecibo.conta().isBlank()) {
-                if (dadosRecibo.conta().contains("-")) {
-                    String[] partes = dadosRecibo.conta().split("-");
-                    contaNumero = partes[0];
-                    if (partes.length > 1) {
-                        contaDigito = partes[1];
-                    }
-                } else {
-                    contaNumero = dadosRecibo.conta();
-                }
-            }
-            
-            // Formata data de vencimento da primeira parcela para o email
-            String vencimento = dataBase.format(
-                    java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy", java.util.Locale.of("pt", "BR"))
-            );
-            
-            // Formata a chave PIX conforme o tipo (se fornecida)
-            String chavePixFormatada = null;
-            if (dadosRecibo.tipoChavePix() != null && dadosRecibo.chavePix() != null && !dadosRecibo.chavePix().isBlank()) {
-                chavePixFormatada = formatarChavePix(dadosRecibo.tipoChavePix(), dadosRecibo.chavePix());
-            }
-            
-            // Envia o email com múltiplos PDFs anexados de forma assíncrona
-            System.out.println("Iniciando envio assíncrono de email com " + numeroParcelas + " anexo(s)...");
-            emailService.enviarReciboEmailComMultiplosAnexosAsync(
-                    request.emailDestinatario(),
-                    request.nomeDestinatario(),
-                    request.assunto(),
-                    pdfsRecibos,
-                    dadosRecibo.nomePrestador(),
-                    dadosRecibo.cpf(),
-                    dadosRecibo.condominio(),
-                    dadosRecibo.codigoEmpreendimento(),
+            // Processa tudo em background de forma assíncrona
+            reciboProcessamentoService.processarRecibosAssincrono(
+                    request,
+                    ipCliente,
+                    dadosRecibo,
                     valorBruto,
                     valorInss,
                     valorLiquido,
-                    vencimento,
-                    contaNumero,
-                    dadosRecibo.descricaoServico(),
-                    dadosRecibo.nomeBanco(),
-                    agenciaNumero,
-                    agenciaDigito,
-                    contaNumero,
-                    contaDigito,
-                    chavePixFormatada
+                    numeroParcelas,
+                    dataBase
             );
             
-            System.out.println("Email em processamento em background. Retornando resposta imediata.");
-            System.out.println("=== FIM DO PROCESSAMENTO ===");
+            System.out.println("Processamento iniciado em background. Retornando resposta imediata.");
+            System.out.println("=== RESPOSTA ENVIADA ===");
             
             // Retorna resposta imediata ao usuário
             response.put("sucesso", true);
             String mensagemParcelas = numeroParcelas > 1 
                     ? numeroParcelas + " recibos" 
                     : "1 recibo";
-            response.put("mensagem", mensagemParcelas + " sendo enviado(s) para centraldepagamentos@precisaoadm.com.br (solicitado por " + request.nomeDestinatario() + ")");
+            response.put("mensagem", mensagemParcelas + " sendo processado(s) e enviado(s) para centraldepagamentos@precisaoadm.com.br (solicitado por " + request.nomeDestinatario() + ")");
             response.put("emailDestinatario", "centraldepagamentos@precisaoadm.com.br");
             response.put("numeroParcelas", numeroParcelas);
             response.put("emailSolicitante", request.emailDestinatario());
@@ -235,58 +169,6 @@ public class ReciboController {
             return java.math.BigDecimal.ZERO;
         }
         return calculoService.calcularINSS(valorBruto);
-    }
-
-    private String gerarNomeArquivoComParcela(String nomePrestador, int numeroParcela, int totalParcelas, java.time.LocalDate dataVencimento) {
-        String dataFormatada = dataVencimento.format(
-                java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd", java.util.Locale.of("pt", "BR"))
-        );
-
-        String nomeArquivoBase = "Recibo_ProLabore";
-        
-        if (nomePrestador != null && !nomePrestador.isBlank()) {
-            String nomeSanitizado = nomePrestador
-                    .replaceAll("[^a-zA-Z0-9\\s]", "")
-                    .replaceAll("\\s+", "_")
-                    .trim();
-            if (!nomeSanitizado.isEmpty()) {
-                nomeArquivoBase += "_" + nomeSanitizado;
-            }
-        }
-        
-        // Adiciona número da parcela se houver mais de uma
-        if (totalParcelas > 1) {
-            nomeArquivoBase += "_Parcela" + numeroParcela + "de" + totalParcelas;
-        }
-        
-        return nomeArquivoBase + "_" + dataFormatada + ".pdf";
-    }
-
-    private String formatarChavePix(String tipo, String chave) {
-        if (chave == null || chave.isBlank()) {
-            return "";
-        }
-        if ("cpf".equalsIgnoreCase(tipo)) {
-            // Remove formatação se já existir e formata como CPF
-            String cpfLimpo = chave.replaceAll("[^0-9]", "");
-            if (cpfLimpo.length() == 11) {
-                return String.format("%s.%s.%s-%s",
-                        cpfLimpo.substring(0, 3),
-                        cpfLimpo.substring(3, 6),
-                        cpfLimpo.substring(6, 9),
-                        cpfLimpo.substring(9, 11));
-            }
-        } else if ("celular".equalsIgnoreCase(tipo)) {
-            // Remove formatação se já existir
-            String celularLimpo = chave.replaceAll("[^0-9]", "");
-            if (celularLimpo.length() == 11) {
-                return String.format("(%s) %s-%s",
-                        celularLimpo.substring(0, 2),
-                        celularLimpo.substring(2, 7),
-                        celularLimpo.substring(7, 11));
-            }
-        }
-        return chave;
     }
 
     private String obterIpCliente(HttpServletRequest request) {
