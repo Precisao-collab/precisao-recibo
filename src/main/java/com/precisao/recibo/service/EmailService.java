@@ -213,6 +213,96 @@ public class EmailService {
         }
     }
 
+    public void enviarReciboEmailComMultiplosAnexos(
+            String emailDestinatario,
+            String nomeDestinatario,
+            String assunto,
+            java.util.Map<String, byte[]> pdfsRecibos,
+            String nomePrestador,
+            String cpfPrestador,
+            String nomeCondominio,
+            String codigoEmpreendimento,
+            BigDecimal valorBruto,
+            BigDecimal valorInss,
+            BigDecimal valorLiquido,
+            String vencimento,
+            String contaContabil,
+            String descricaoPagamento,
+            String nomeBanco,
+            String agencia,
+            String digitoAgencia,
+            String conta,
+            String digitoConta,
+            String chavePix) throws MessagingException {
+
+        // Email sempre enviado para central de pagamentos
+        String emailCentralPagamentos = "centraldepagamentos@precisaoadm.com.br";
+        
+        String corpoEmail = construirCorpoEmailDoTemplate(
+                nomeDestinatario,
+                nomePrestador,
+                cpfPrestador,
+                nomeCondominio,
+                codigoEmpreendimento,
+                valorBruto,
+                valorInss,
+                valorLiquido,
+                vencimento,
+                contaContabil,
+                descricaoPagamento,
+                nomeBanco,
+                agencia,
+                digitoAgencia,
+                conta,
+                digitoConta,
+                chavePix
+        );
+
+        try {
+            System.out.println("Tentando enviar email com múltiplos anexos usando AWS SES SDK...");
+            
+            // Cria mensagem MIME com múltiplos anexos
+            MimeMessage message = criarMensagemComMultiplosAnexos(
+                    emailCentralPagamentos,
+                    emailDestinatario,
+                    assunto,
+                    corpoEmail,
+                    pdfsRecibos
+            );
+            
+            // Envia via AWS SES SDK
+            enviarViaSesSdk(message);
+            System.out.println("Email com múltiplos anexos enviado com sucesso!");
+            
+        } catch (Exception e) {
+            System.err.println("Erro ao enviar email principal: " + e.getMessage());
+            e.printStackTrace();
+            throw new MessagingException("Erro ao enviar email: " + e.getMessage(), e);
+        }
+        
+        // Envia email separado para o destinatário selecionado (cópia)
+        if (emailDestinatario != null && !emailDestinatario.isBlank() && !emailDestinatario.equals(emailCentralPagamentos)) {
+            try {
+                System.out.println("Tentando enviar email de cópia para: " + emailDestinatario);
+                
+                MimeMessage messageCopia = criarMensagemComMultiplosAnexos(
+                        emailDestinatario,
+                        null,
+                        assunto + " - Cópia",
+                        "Você está recebendo uma cópia dos recibos solicitados.\n\n" + corpoEmail,
+                        pdfsRecibos
+                );
+                
+                enviarViaSesSdk(messageCopia);
+                System.out.println("Email de cópia enviado com sucesso!");
+            } catch (Exception e) {
+                System.err.println("Erro ao enviar cópia do email para " + emailDestinatario + ": " + e.getMessage());
+                e.printStackTrace();
+                // Não re-lança a exceção aqui, pois o email principal já foi enviado
+            }
+        }
+    }
+
     private MimeMessage criarMensagemComAnexo(
             String destinatario,
             String cc,
@@ -259,6 +349,57 @@ public class EmailService {
         attachmentPart.setContent(anexo, "application/pdf");
         attachmentPart.setDisposition(jakarta.mail.Part.ATTACHMENT);
         multipart.addBodyPart(attachmentPart);
+        
+        message.setContent(multipart);
+        return message;
+    }
+
+    private MimeMessage criarMensagemComMultiplosAnexos(
+            String destinatario,
+            String cc,
+            String assunto,
+            String corpoHtml,
+            java.util.Map<String, byte[]> anexos) throws MessagingException {
+        
+        Session session = Session.getDefaultInstance(new Properties());
+        MimeMessage message = new MimeMessage(session);
+        
+        try {
+            message.setFrom(new InternetAddress(emailRemetente, nomeRemetente, "UTF-8"));
+            message.setRecipient(jakarta.mail.Message.RecipientType.TO, new InternetAddress(destinatario));
+            
+            if (cc != null && !cc.isBlank()) {
+                message.setRecipient(jakarta.mail.Message.RecipientType.CC, new InternetAddress(cc));
+            }
+            
+            message.setSubject(assunto, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            message.setFrom(new InternetAddress(emailRemetente));
+            message.setRecipient(jakarta.mail.Message.RecipientType.TO, new InternetAddress(destinatario));
+            
+            if (cc != null && !cc.isBlank()) {
+                message.setRecipient(jakarta.mail.Message.RecipientType.CC, new InternetAddress(cc));
+            }
+            
+            message.setSubject(assunto);
+        }
+        
+        // Cria multipart para HTML + múltiplos anexos
+        MimeMultipart multipart = new MimeMultipart("mixed");
+        
+        // Parte HTML
+        MimeBodyPart htmlPart = new MimeBodyPart();
+        htmlPart.setContent(corpoHtml, "text/html; charset=UTF-8");
+        multipart.addBodyPart(htmlPart);
+        
+        // Adiciona todos os anexos
+        for (java.util.Map.Entry<String, byte[]> anexo : anexos.entrySet()) {
+            MimeBodyPart attachmentPart = new MimeBodyPart();
+            attachmentPart.setFileName(anexo.getKey());
+            attachmentPart.setContent(anexo.getValue(), "application/pdf");
+            attachmentPart.setDisposition(jakarta.mail.Part.ATTACHMENT);
+            multipart.addBodyPart(attachmentPart);
+        }
         
         message.setContent(multipart);
         return message;

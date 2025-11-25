@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR">
 <head>
     <meta charset="UTF-8"/>
-    <title>Recibo de Pró-Labore</title>
+    <title>Recibo de Pagamento</title>
     <style>
         @page {
             size: A4;
@@ -184,15 +184,25 @@
             <div class="logo-container{{LOGO_STYLE}}">
                 <img src="{{LOGO_BASE64}}" alt="Logo Precisão" />
             </div>
-            <h1>PRO-LABORE RECIBO</h1>
+            <h1>RECIBO DE PAGAMENTO</h1>
         </div>
 
-        <!-- Linha com PRO-LABORE e Número do Recibo -->
+        <!-- Linha com PRO-LABORE e Data de Vencimento -->
         <table>
             <tr>
-                <td class="row-header" style="width: 70%;">PRO-LABORE RECIBO</td>
-                <td class="row-header text-center" style="width: 15%;">Mês de referência</td>
-                <td class="text-center" style="width: 15%;">{{MES_REFERENCIA_CURTO}}</td>
+                <td class="row-header" style="width: 70%;">RECIBO DE PAGAMENTO</td>
+                <td class="row-header text-center" style="width: 15%;">Data de Vencimento</td>
+                <td class="text-center" style="width: 15%;">{{DATA_RECIBO}}</td>
+            </tr>
+        </table>
+
+        <!-- Parcelas -->
+        <table>
+            <tr>
+                <td class="row-header" style="width: 100%;">
+                    <span class="label">Parcelas: </span>
+                    <span class="value">{{PARCELAS}}</span>
+                </td>
             </tr>
         </table>
 
@@ -335,7 +345,7 @@
                 </td>
                 <td style="width: 33%;">
                     <span class="label">Data</span><br/>
-                    <span class="value">{{DATA_EMISSAO}}</span>
+                    <span class="value">{{DATA_RECIBO}}</span>
                 </td>
                 <td style="width: 34%;">
                     <span class="label">Assinatura</span><br/>

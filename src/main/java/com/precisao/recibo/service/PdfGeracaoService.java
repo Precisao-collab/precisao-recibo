@@ -54,17 +54,26 @@ public class PdfGeracaoService {
 
     public byte[] gerarReciboPDF(ReciboRequest request, String nomeGerente, String ipCliente) throws IOException {
         // Novo método usando HTML template com QR Code
-        return gerarReciboPDFDeHTML(request, nomeGerente, ipCliente);
+        return gerarReciboPDFDeHTML(request, nomeGerente, ipCliente, null, null);
+    }
+
+    public byte[] gerarReciboPDF(ReciboRequest request, String nomeGerente, String ipCliente, String dataVencimento, Integer numeroParcela) throws IOException {
+        // Método para gerar recibo com data específica e número da parcela
+        return gerarReciboPDFDeHTML(request, nomeGerente, ipCliente, dataVencimento, numeroParcela);
     }
 
     public byte[] gerarReciboPDFDeHTML(ReciboRequest request, String nomeGerente, String ipCliente) throws IOException {
+        return gerarReciboPDFDeHTML(request, nomeGerente, ipCliente, null, null);
+    }
+
+    public byte[] gerarReciboPDFDeHTML(ReciboRequest request, String nomeGerente, String ipCliente, String dataVencimento, Integer numeroParcela) throws IOException {
         BigDecimal valorBruto = request.valorBruto();
         BigDecimal valorINSS = calcularINSSComTipo(request.valorBruto(), request.tipoImposto());
         BigDecimal valorLiquido = calculoService.calcularValorLiquido(valorBruto, valorINSS);
         String valorBrutoPorExtenso = valorExtensoService.converter(valorBruto);
         String valorLiquidoPorExtenso = valorExtensoService.converter(valorLiquido);
 
-        Map<String, String> dados = construirDadosParaHTML(request, valorBruto, valorINSS, valorLiquido, valorBrutoPorExtenso, valorLiquidoPorExtenso, nomeGerente, ipCliente);
+        Map<String, String> dados = construirDadosParaHTML(request, valorBruto, valorINSS, valorLiquido, valorBrutoPorExtenso, valorLiquidoPorExtenso, nomeGerente, ipCliente, dataVencimento, numeroParcela);
         
         return htmlToPdfService.gerarPdfDeHtml(HTML_TEMPLATE_PATH, dados);
     }
@@ -227,6 +236,9 @@ public class PdfGeracaoService {
         if (chave == null || chave.isBlank()) {
             return "";
         }
+        if (tipo == null || tipo.isBlank()) {
+            return chave; // Se não tiver tipo, retorna a chave sem formatação
+        }
         String chaveFormatada = chave;
         if ("cpf".equalsIgnoreCase(tipo)) {
             // Remove formatação se já existir e formata como CPF
@@ -253,22 +265,16 @@ public class PdfGeracaoService {
                                                         String valorBrutoPorExtenso,
                                                         String valorLiquidoPorExtenso,
                                                         String nomeGerente,
-                                                        String ipCliente) {
+                                                        String ipCliente,
+                                                        String dataVencimento,
+                                                        Integer numeroParcela) {
         Map<String, String> dados = new HashMap<>();
 
-        // Data atual formatada (dd/MM/yyyy)
-        String dataAtual = java.time.LocalDate.now().format(
+        // Data atual formatada (dd/MM/yyyy) - usada como fallback
+        // Usa fuso horário do Brasil para garantir data/hora corretas
+        java.time.ZoneId zonaBrasil = java.time.ZoneId.of("America/Sao_Paulo");
+        String dataAtual = java.time.LocalDate.now(zonaBrasil).format(
                 java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.of("pt", "BR"))
-        );
-
-        String mesReferencia = java.time.LocalDate.now().format(
-                java.time.format.DateTimeFormatter.ofPattern("MMMM/yyyy", Locale.of("pt", "BR"))
-        );
-        mesReferencia = mesReferencia.substring(0, 1).toUpperCase() + mesReferencia.substring(1);
-
-        // Mês curto (ex: 11/2025)
-        String mesReferenciaCurto = java.time.LocalDate.now().format(
-                java.time.format.DateTimeFormatter.ofPattern("MM/yyyy", Locale.of("pt", "BR"))
         );
 
         NumberFormat currencyFormat = NumberFormat.getCurrencyInstance(Locale.of("pt", "BR"));
@@ -282,8 +288,6 @@ public class PdfGeracaoService {
         dados.put("LOGO_STYLE", logoBase64.isEmpty() ? " hidden" : "");
 
         // Cabeçalho
-        dados.put("MES_REFERENCIA", mesReferencia);
-        dados.put("MES_REFERENCIA_CURTO", mesReferenciaCurto);
         dados.put("DATA_EMISSAO", dataAtual);
         dados.put("LOCAL_EMISSAO", "Brasil");
         dados.put("LOCALIDADE", "Brasil");
@@ -333,6 +337,26 @@ public class PdfGeracaoService {
         String retencaoValor = (request.retencao() != null && request.retencao()) ? "Sim" : "Não";
         dados.put("RETENCAO_VALOR", retencaoValor);
 
+        // Parcelas (obrigatório)
+        String parcelas = request.parcelas() != null && !request.parcelas().isBlank() ? request.parcelas() : "1";
+        // Se houver número da parcela específico, exibe "X de Y" (ex: "1 de 3")
+        String parcelasExibicao = numeroParcela != null 
+                ? numeroParcela + " de " + parcelas 
+                : parcelas;
+        dados.put("PARCELAS", parcelasExibicao);
+        dados.put("PARCELAS_DISPLAY", ""); // Sempre exibe já que é obrigatório
+
+        // Data - usa dataVencimento específica se fornecida, senão usa a do request, senão data atual
+        String dataFormatada;
+        if (dataVencimento != null && !dataVencimento.isBlank()) {
+            dataFormatada = formatarData(dataVencimento);
+        } else if (request.data() != null && !request.data().isBlank()) {
+            dataFormatada = formatarData(request.data());
+        } else {
+            dataFormatada = dataAtual;
+        }
+        dados.put("DATA_RECIBO", dataFormatada);
+
         // QR Code com informações do gerente - formato URL com dados
         String qrCodeBase64 = "";
         if (nomeGerente != null && !nomeGerente.isBlank()) {
@@ -342,8 +366,9 @@ public class PdfGeracaoService {
                 System.out.println("Gerando QR Code. Backend URL: " + backendUrl);
                 String nomeGerenteEncoded = java.net.URLEncoder.encode(nomeGerente, "UTF-8");
                 String dataEncoded = java.net.URLEncoder.encode(dataAtual, "UTF-8");
+                // Usa o mesmo fuso horário do Brasil já definido acima
                 String horaEncoded = java.net.URLEncoder.encode(
-                    java.time.LocalTime.now().format(
+                    java.time.LocalTime.now(zonaBrasil).format(
                         java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss", Locale.of("pt", "BR"))
                     ), "UTF-8");
                 
@@ -361,11 +386,12 @@ public class PdfGeracaoService {
                 System.out.println("QR Code gerado com sucesso");
             } catch (java.io.UnsupportedEncodingException e) {
                 System.err.println("Erro ao codificar URL do QR Code: " + e.getMessage());
+                // Usa o mesmo fuso horário do Brasil já definido acima
                 String qrCodeData = String.format(
                     "{\"tipo\":\"recibo-prolabore\",\"gerente\":\"%s\",\"data\":\"%s\",\"hora\":\"%s\"}",
                     nomeGerente.replace("\"", "\\\""),
                     dataAtual,
-                    java.time.LocalTime.now().format(
+                    java.time.LocalTime.now(zonaBrasil).format(
                         java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss", Locale.of("pt", "BR"))
                     )
                 );
@@ -437,5 +463,16 @@ public class PdfGeracaoService {
             return BigDecimal.ZERO;
         }
         return calculoService.calcularINSS(valorBruto);
+    }
+
+    private String formatarData(String dataISO) {
+        try {
+            // Formato esperado: YYYY-MM-DD
+            java.time.LocalDate data = java.time.LocalDate.parse(dataISO);
+            return data.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.of("pt", "BR")));
+        } catch (Exception e) {
+            // Se houver erro ao parsear, retorna a data original
+            return dataISO;
+        }
     }
 }

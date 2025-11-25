@@ -20,7 +20,9 @@ public record ReciboRequest(
         BigDecimal valorBruto,
         String descricaoServico,
         String tipoImposto,
-        Boolean retencao
+        Boolean retencao,
+        String parcelas,
+        String data
 ) {
 }
 

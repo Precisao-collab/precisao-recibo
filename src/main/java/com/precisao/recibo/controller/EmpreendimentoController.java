@@ -43,8 +43,7 @@ public class EmpreendimentoController {
                 String.class
             );
             
-            // A resposta já vem em JSON da API externa
-            // Retornamos diretamente como JSON
+
             return ResponseEntity.ok()
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(response.getBody());
