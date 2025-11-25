@@ -8,6 +8,7 @@ import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -210,6 +211,57 @@ public class EmailService {
                 e.printStackTrace();
                 // Não re-lança a exceção aqui, pois o email principal já foi enviado
             }
+        }
+    }
+
+    @Async("emailExecutor")
+    public void enviarReciboEmailComMultiplosAnexosAsync(
+            String emailDestinatario,
+            String nomeDestinatario,
+            String assunto,
+            java.util.Map<String, byte[]> pdfsRecibos,
+            String nomePrestador,
+            String cpfPrestador,
+            String nomeCondominio,
+            String codigoEmpreendimento,
+            BigDecimal valorBruto,
+            BigDecimal valorInss,
+            BigDecimal valorLiquido,
+            String vencimento,
+            String contaContabil,
+            String descricaoPagamento,
+            String nomeBanco,
+            String agencia,
+            String digitoAgencia,
+            String conta,
+            String digitoConta,
+            String chavePix) {
+        try {
+            enviarReciboEmailComMultiplosAnexos(
+                    emailDestinatario,
+                    nomeDestinatario,
+                    assunto,
+                    pdfsRecibos,
+                    nomePrestador,
+                    cpfPrestador,
+                    nomeCondominio,
+                    codigoEmpreendimento,
+                    valorBruto,
+                    valorInss,
+                    valorLiquido,
+                    vencimento,
+                    contaContabil,
+                    descricaoPagamento,
+                    nomeBanco,
+                    agencia,
+                    digitoAgencia,
+                    conta,
+                    digitoConta,
+                    chavePix
+            );
+        } catch (MessagingException e) {
+            System.err.println("ERRO ao enviar email de forma assíncrona: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

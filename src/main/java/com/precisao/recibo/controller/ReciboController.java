@@ -161,9 +161,9 @@ public class ReciboController {
                 chavePixFormatada = formatarChavePix(dadosRecibo.tipoChavePix(), dadosRecibo.chavePix());
             }
             
-            // Envia o email com múltiplos PDFs anexados
-            System.out.println("Enviando email com " + numeroParcelas + " anexo(s)...");
-            emailService.enviarReciboEmailComMultiplosAnexos(
+            // Envia o email com múltiplos PDFs anexados de forma assíncrona
+            System.out.println("Iniciando envio assíncrono de email com " + numeroParcelas + " anexo(s)...");
+            emailService.enviarReciboEmailComMultiplosAnexosAsync(
                     request.emailDestinatario(),
                     request.nomeDestinatario(),
                     request.assunto(),
@@ -186,18 +186,20 @@ public class ReciboController {
                     chavePixFormatada
             );
             
-            System.out.println("Email com " + numeroParcelas + " recibo(s) enviado com sucesso!");
-            System.out.println("=== FIM DO ENVIO DE EMAIL ===");
+            System.out.println("Email em processamento em background. Retornando resposta imediata.");
+            System.out.println("=== FIM DO PROCESSAMENTO ===");
             
+            // Retorna resposta imediata ao usuário
             response.put("sucesso", true);
             String mensagemParcelas = numeroParcelas > 1 
                     ? numeroParcelas + " recibos" 
                     : "1 recibo";
-            response.put("mensagem", mensagemParcelas + " enviado(s) com sucesso para centraldepagamentos@precisaoadm.com.br (solicitado por " + request.nomeDestinatario() + ")");
+            response.put("mensagem", mensagemParcelas + " sendo enviado(s) para centraldepagamentos@precisaoadm.com.br (solicitado por " + request.nomeDestinatario() + ")");
             response.put("emailDestinatario", "centraldepagamentos@precisaoadm.com.br");
             response.put("numeroParcelas", numeroParcelas);
             response.put("emailSolicitante", request.emailDestinatario());
             response.put("nomeSolicitante", request.nomeDestinatario());
+            response.put("processando", true);
             
             return ResponseEntity.status(HttpStatus.OK).body(response);
             
