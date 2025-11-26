@@ -346,16 +346,19 @@ public class PdfGeracaoService {
         dados.put("PARCELAS", parcelasExibicao);
         dados.put("PARCELAS_DISPLAY", ""); // Sempre exibe já que é obrigatório
 
-        // Data - usa dataVencimento específica se fornecida, senão usa a do request, senão data atual
-        String dataFormatada;
+        // Data de Vencimento - usa dataVencimento se fornecida, senão usa a do request, senão data atual
+        String dataVencimentoFormatada;
         if (dataVencimento != null && !dataVencimento.isBlank()) {
-            dataFormatada = formatarData(dataVencimento);
+            dataVencimentoFormatada = formatarDataISO(dataVencimento);
         } else if (request.data() != null && !request.data().isBlank()) {
-            dataFormatada = formatarData(request.data());
+            dataVencimentoFormatada = formatarDataISO(request.data());
         } else {
-            dataFormatada = dataAtual;
+            dataVencimentoFormatada = dataAtual;
         }
-        dados.put("DATA_RECIBO", dataFormatada);
+        dados.put("DATA_VENCIMENTO", dataVencimentoFormatada);
+
+        // Data de Emissão - sempre usa a data atual (now) para o campo Data do recibo
+        dados.put("DATA_EMISSAO", dataAtual);
 
         // QR Code com informações do gerente - formato URL com dados
         String qrCodeBase64 = "";
@@ -465,7 +468,7 @@ public class PdfGeracaoService {
         return calculoService.calcularINSS(valorBruto);
     }
 
-    private String formatarData(String dataISO) {
+    private String formatarDataISO(String dataISO) {
         try {
             // Formato esperado: YYYY-MM-DD
             java.time.LocalDate data = java.time.LocalDate.parse(dataISO);

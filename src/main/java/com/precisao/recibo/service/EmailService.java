@@ -168,12 +168,12 @@ public class EmailService {
         );
 
         try {
-            System.out.println("Tentando enviar email principal usando AWS SES SDK...");
+            System.out.println("Tentando enviar email principal para central de pagamentos usando AWS SES SDK...");
             
-            // Cria mensagem MIME
+            // Cria mensagem MIME - email principal vai apenas para central de pagamentos (sem CC)
             MimeMessage message = criarMensagemComAnexo(
                     emailCentralPagamentos,
-                    emailDestinatario,
+                    null, // Sem CC no email principal
                     assunto,
                     corpoEmail,
                     nomeArquivo,
@@ -182,7 +182,7 @@ public class EmailService {
             
             // Envia via AWS SES SDK
             enviarViaSesSdk(message);
-            System.out.println("Email principal enviado com sucesso!");
+            System.out.println("Email principal enviado com sucesso para central de pagamentos!");
             
         } catch (Exception e) {
             System.err.println("Erro ao enviar email principal: " + e.getMessage());
@@ -190,10 +190,10 @@ public class EmailService {
             throw new MessagingException("Erro ao enviar email: " + e.getMessage(), e);
         }
         
-        // Envia email separado para o destinatário selecionado (cópia)
+        // Envia email separado para o gerente (cópia)
         if (emailDestinatario != null && !emailDestinatario.isBlank() && !emailDestinatario.equals(emailCentralPagamentos)) {
             try {
-                System.out.println("Tentando enviar email de cópia para: " + emailDestinatario);
+                System.out.println("Tentando enviar email de cópia para o gerente: " + emailDestinatario);
                 
                 MimeMessage messageCopia = criarMensagemComAnexo(
                         emailDestinatario,
@@ -205,7 +205,7 @@ public class EmailService {
                 );
                 
                 enviarViaSesSdk(messageCopia);
-                System.out.println("Email de cópia enviado com sucesso!");
+                System.out.println("Email de cópia enviado com sucesso para o gerente!");
             } catch (Exception e) {
                 System.err.println("Erro ao enviar cópia do email para " + emailDestinatario + ": " + e.getMessage());
                 e.printStackTrace();
@@ -311,12 +311,12 @@ public class EmailService {
         );
 
         try {
-            System.out.println("Tentando enviar email com múltiplos anexos usando AWS SES SDK...");
+            System.out.println("Tentando enviar email com múltiplos anexos para central de pagamentos usando AWS SES SDK...");
             
-            // Cria mensagem MIME com múltiplos anexos
+            // Cria mensagem MIME com múltiplos anexos - email principal vai apenas para central de pagamentos (sem CC)
             MimeMessage message = criarMensagemComMultiplosAnexos(
                     emailCentralPagamentos,
-                    emailDestinatario,
+                    null, // Sem CC no email principal
                     assunto,
                     corpoEmail,
                     pdfsRecibos
@@ -324,7 +324,7 @@ public class EmailService {
             
             // Envia via AWS SES SDK
             enviarViaSesSdk(message);
-            System.out.println("Email com múltiplos anexos enviado com sucesso!");
+            System.out.println("Email com múltiplos anexos enviado com sucesso para central de pagamentos!");
             
         } catch (Exception e) {
             System.err.println("Erro ao enviar email principal: " + e.getMessage());
@@ -332,10 +332,10 @@ public class EmailService {
             throw new MessagingException("Erro ao enviar email: " + e.getMessage(), e);
         }
         
-        // Envia email separado para o destinatário selecionado (cópia)
+        // Envia email separado para o gerente (cópia)
         if (emailDestinatario != null && !emailDestinatario.isBlank() && !emailDestinatario.equals(emailCentralPagamentos)) {
             try {
-                System.out.println("Tentando enviar email de cópia para: " + emailDestinatario);
+                System.out.println("Tentando enviar email de cópia para o gerente: " + emailDestinatario);
                 
                 MimeMessage messageCopia = criarMensagemComMultiplosAnexos(
                         emailDestinatario,
@@ -346,7 +346,7 @@ public class EmailService {
                 );
                 
                 enviarViaSesSdk(messageCopia);
-                System.out.println("Email de cópia enviado com sucesso!");
+                System.out.println("Email de cópia enviado com sucesso para o gerente!");
             } catch (Exception e) {
                 System.err.println("Erro ao enviar cópia do email para " + emailDestinatario + ": " + e.getMessage());
                 e.printStackTrace();
