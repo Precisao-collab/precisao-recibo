@@ -28,14 +28,17 @@ public class ReciboController {
     private final PdfGeracaoService pdfGeracaoService;
     private final CalculoService calculoService;
     private final com.precisao.recibo.service.ReciboProcessamentoService reciboProcessamentoService;
+    private final com.precisao.recibo.service.CpfValidacaoService cpfValidacaoService;
 
     public ReciboController(
             PdfGeracaoService pdfGeracaoService,
             CalculoService calculoService,
-            com.precisao.recibo.service.ReciboProcessamentoService reciboProcessamentoService) {
+            com.precisao.recibo.service.ReciboProcessamentoService reciboProcessamentoService,
+            com.precisao.recibo.service.CpfValidacaoService cpfValidacaoService) {
         this.pdfGeracaoService = pdfGeracaoService;
         this.calculoService = calculoService;
         this.reciboProcessamentoService = reciboProcessamentoService;
+        this.cpfValidacaoService = cpfValidacaoService;
     }
 
     @PostMapping(produces = MediaType.APPLICATION_PDF_VALUE)
@@ -276,6 +279,23 @@ public class ReciboController {
         return ResponseEntity.ok()
                 .header("Content-Type", "text/html; charset=UTF-8")
                 .body(html);
+    }
+
+    @GetMapping("/validar-cpf")
+    public ResponseEntity<Map<String, Object>> validarCpf(@RequestParam String cpf) {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            boolean cpfValido = cpfValidacaoService.validarCpfNoGoverno(cpf);
+            response.put("valido", cpfValido);
+            response.put("mensagem", cpfValido ? "CPF válido" : "CPF inválido ou não encontrado na base do governo");
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("valido", false);
+            response.put("mensagem", "Erro ao validar CPF: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 }
 
