@@ -31,10 +31,14 @@ rm -rf target/
 # Build
 echo "📦 Compilando aplicação..."
 export JAVA_TOOL_OPTIONS="-Xmx256m -Xms128m"
-if [ -f "./mvnw" ]; then
+
+# Verificar se Maven Wrapper está completo
+if [ -f "./mvnw" ] && [ -d "./.mvn/wrapper" ]; then
+    echo "Usando Maven Wrapper..."
     chmod +x ./mvnw
     ./mvnw clean package -DskipTests
 else
+    echo "Usando Maven instalado no sistema..."
     mvn clean package -DskipTests
 fi
 

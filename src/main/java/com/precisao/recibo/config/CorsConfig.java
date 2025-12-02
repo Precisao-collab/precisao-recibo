@@ -16,11 +16,9 @@ public class CorsConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
         
-        // Permite localhost (desenvolvimento) e Render (produção)
-        config.setAllowedOrigins(Arrays.asList(
-            "http://localhost:4200",
-            "https://precisao-recibo-frontend.onrender.com"
-        ));
+        // Permite todas as origens (para desenvolvimento e acesso via IP)
+        // Em produção, restringir para origens específicas
+        config.addAllowedOriginPattern("*");
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(Arrays.asList("*"));
         config.setAllowCredentials(true);
