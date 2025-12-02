@@ -7,16 +7,12 @@ services:
     region: oregon
     plan: free
     envVars:
-      - key: SPRING_MAIL_HOST
-        value: email-smtp.us-east-2.amazonaws.com
-      - key: SPRING_MAIL_PORT
-        value: 587
       - key: SPRING_MAIL_USERNAME
-        sync: false  # AWS Access Key ID de um usuário IAM criado especificamente para este serviço
+        value: ludgalvao09@gmail.com
       - key: SPRING_MAIL_PASSWORD
-        sync: false  # AWS Secret Access Key do usuário IAM (NÃO use credenciais SMTP aqui)
+        value: hfqb fhnt rsit mwsd
       - key: APP_EMAIL_REMETENTE
-        value: agendamento@precisaoadm.com.br
+        value: ludgalvao09@gmail.com
       - key: APP_EMAIL_NOME_REMETENTE
         value: Sistema de Recibos - Precisao
       - key: APP_BACKEND_URL

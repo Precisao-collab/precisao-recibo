@@ -11,56 +11,67 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.SdkBytes;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.ses.SesClient;
-import software.amazon.awssdk.services.ses.model.RawMessage;
-import software.amazon.awssdk.services.ses.model.SendRawEmailRequest;
+import jakarta.mail.Transport;
+import jakarta.mail.Authenticator;
+import jakarta.mail.PasswordAuthentication;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.UUID;
 
 @Service
 public class EmailService {
 
-    private final SesClient sesClient;
+    private final Session mailSession;
     private final String emailRemetente;
     private final String nomeRemetente;
 
     public EmailService(
-            @Value("${SPRING_MAIL_USERNAME:AKIA4GR4PWO4TTRUY6LA}") String awsAccessKey,
-            @Value("${SPRING_MAIL_PASSWORD:I/u1sY5wU8cxYxDDL1EjTKO6H7gotbVGjkgMWIwd}") String awsSecretKey,
+            @Value("${spring.mail.host}") String smtpHost,
+            @Value("${spring.mail.port}") int smtpPort,
+            @Value("${spring.mail.username}") String smtpUsername,
+            @Value("${spring.mail.password}") String smtpPassword,
             @Value("${app.email.remetente}") String emailRemetente,
             @Value("${app.email.nome-remetente}") String nomeRemetente) {
         
         this.emailRemetente = emailRemetente;
         this.nomeRemetente = nomeRemetente;
         
-        // Cria cliente AWS SES usando credenciais
-        // Nota: Se forem credenciais SMTP, pode não funcionar. Nesse caso, será necessário criar Access Keys IAM
-        System.out.println("Configurando AWS SES SDK com Access Key: " + awsAccessKey.substring(0, Math.min(10, awsAccessKey.length())) + "...");
+        System.out.println("Configurando SMTP Gmail: " + smtpHost + ":" + smtpPort);
+        System.out.println("Email remetente: " + this.emailRemetente);
         
-        try {
-            AwsBasicCredentials awsCredentials = AwsBasicCredentials.create(awsAccessKey, awsSecretKey);
-            this.sesClient = SesClient.builder()
-                    .region(Region.US_EAST_2) // Região do SES configurada
-                    .credentialsProvider(StaticCredentialsProvider.create(awsCredentials))
-                    .build();
-            System.out.println("Cliente AWS SES configurado com sucesso!");
-        } catch (Exception e) {
-            System.err.println("Erro ao configurar cliente AWS SES: " + e.getMessage());
-            throw new RuntimeException("Erro ao configurar AWS SES SDK. Verifique se as credenciais são Access Keys IAM válidas.", e);
-        }
+        // Configura propriedades SMTP do Gmail
+        Properties props = new Properties();
+        props.put("mail.smtp.host", smtpHost);
+        props.put("mail.smtp.port", String.valueOf(smtpPort));
+        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.starttls.enable", "true");
+        props.put("mail.smtp.starttls.required", "true");
+        props.put("mail.smtp.connectiontimeout", "5000");
+        props.put("mail.smtp.timeout", "5000");
+        props.put("mail.smtp.writetimeout", "5000");
+        props.put("mail.smtp.ssl.trust", smtpHost);
+        
+        // Cria autenticador para SMTP
+        Authenticator authenticator = new Authenticator() {
+            @Override
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(smtpUsername, smtpPassword);
+            }
+        };
+        
+        // Cria sessão de email
+        this.mailSession = Session.getInstance(props, authenticator);
+        
+        System.out.println("Sessão SMTP Gmail configurada com sucesso!");
     }
 
     public void enviarReciboEmail(
@@ -168,7 +179,10 @@ public class EmailService {
         );
 
         try {
-            System.out.println("Tentando enviar email principal para central de pagamentos usando AWS SES SDK...");
+            System.out.println("=== ENVIANDO EMAIL PRINCIPAL ===");
+            System.out.println("Destinatário: " + emailCentralPagamentos);
+            System.out.println("Assunto: " + assunto);
+            System.out.println("Tentando enviar email principal para central de pagamentos usando SMTP Gmail...");
             
             // Cria mensagem MIME - email principal vai apenas para central de pagamentos (sem CC)
             MimeMessage message = criarMensagemComAnexo(
@@ -180,14 +194,57 @@ public class EmailService {
                     pdfRecibo
             );
             
-            // Envia via AWS SES SDK
-            enviarViaSesSdk(message);
-            System.out.println("Email principal enviado com sucesso para central de pagamentos!");
+            // Verifica o destinatário antes de enviar
+            jakarta.mail.Address[] destinatarios = message.getRecipients(jakarta.mail.Message.RecipientType.TO);
+            if (destinatarios != null && destinatarios.length > 0) {
+                System.out.println("Destinatário confirmado no MimeMessage: " + destinatarios[0].toString());
+            }
+            
+            // Verifica BCC (remetente)
+            jakarta.mail.Address[] bccAddresses = message.getRecipients(jakarta.mail.Message.RecipientType.BCC);
+            if (bccAddresses != null && bccAddresses.length > 0) {
+                System.out.println("BCC confirmado no MimeMessage: " + bccAddresses[0].toString());
+            }
+            
+            // Envia via SMTP Gmail
+            enviarViaSmtp(message);
+            System.out.println("Email principal enviado com sucesso para: " + emailCentralPagamentos);
+            System.out.println("=== FIM ENVIO EMAIL PRINCIPAL ===");
             
         } catch (Exception e) {
             System.err.println("Erro ao enviar email principal: " + e.getMessage());
             e.printStackTrace();
             throw new MessagingException("Erro ao enviar email: " + e.getMessage(), e);
+        }
+        
+        // Envia email de confirmação separado para o remetente (Gmail)
+        try {
+            System.out.println("Enviando email de confirmação para o remetente: " + emailRemetente);
+            
+            String corpoConfirmacao = "Confirmação de Envio de Recibo\n\n" +
+                    "Este é um email de confirmação de que o recibo foi enviado com sucesso.\n\n" +
+                    "Detalhes:\n" +
+                    "- Destinatário Principal: " + emailCentralPagamentos + "\n" +
+                    "- Gerente Solicitante: " + nomeDestinatario + " (" + emailDestinatario + ")\n" +
+                    "- Prestador: " + nomePrestador + "\n" +
+                    "- Assunto: " + assunto + "\n\n" +
+                    "O recibo foi enviado para o central de pagamentos e uma cópia foi enviada para o gerente solicitante.";
+            
+            MimeMessage messageConfirmacao = criarMensagemComAnexo(
+                    emailRemetente,
+                    null,
+                    "Confirmação - " + assunto,
+                    corpoConfirmacao,
+                    nomeArquivo,
+                    pdfRecibo
+            );
+            
+            enviarViaSmtp(messageConfirmacao);
+            System.out.println("Email de confirmação enviado com sucesso para: " + emailRemetente);
+        } catch (Exception e) {
+            System.err.println("Erro ao enviar email de confirmação para " + emailRemetente + ": " + e.getMessage());
+            e.printStackTrace();
+            // Não re-lança a exceção aqui, pois o email principal já foi enviado
         }
         
         // Envia email separado para o gerente (cópia)
@@ -204,7 +261,7 @@ public class EmailService {
                         pdfRecibo
                 );
                 
-                enviarViaSesSdk(messageCopia);
+                enviarViaSmtp(messageCopia);
                 System.out.println("Email de cópia enviado com sucesso para o gerente!");
             } catch (Exception e) {
                 System.err.println("Erro ao enviar cópia do email para " + emailDestinatario + ": " + e.getMessage());
@@ -311,7 +368,11 @@ public class EmailService {
         );
 
         try {
-            System.out.println("Tentando enviar email com múltiplos anexos para central de pagamentos usando AWS SES SDK...");
+            System.out.println("=== ENVIANDO EMAIL PRINCIPAL (MÚLTIPLOS ANEXOS) ===");
+            System.out.println("Destinatário: " + emailCentralPagamentos);
+            System.out.println("Assunto: " + assunto);
+            System.out.println("Número de anexos: " + pdfsRecibos.size());
+            System.out.println("Tentando enviar email com múltiplos anexos para central de pagamentos usando SMTP Gmail...");
             
             // Cria mensagem MIME com múltiplos anexos - email principal vai apenas para central de pagamentos (sem CC)
             MimeMessage message = criarMensagemComMultiplosAnexos(
@@ -322,14 +383,57 @@ public class EmailService {
                     pdfsRecibos
             );
             
-            // Envia via AWS SES SDK
-            enviarViaSesSdk(message);
-            System.out.println("Email com múltiplos anexos enviado com sucesso para central de pagamentos!");
+            // Verifica o destinatário antes de enviar
+            jakarta.mail.Address[] destinatarios = message.getRecipients(jakarta.mail.Message.RecipientType.TO);
+            if (destinatarios != null && destinatarios.length > 0) {
+                System.out.println("Destinatário confirmado no MimeMessage: " + destinatarios[0].toString());
+            }
+            
+            // Verifica BCC (remetente)
+            jakarta.mail.Address[] bccAddresses = message.getRecipients(jakarta.mail.Message.RecipientType.BCC);
+            if (bccAddresses != null && bccAddresses.length > 0) {
+                System.out.println("BCC confirmado no MimeMessage: " + bccAddresses[0].toString());
+            }
+            
+            // Envia via SMTP Gmail
+            enviarViaSmtp(message);
+            System.out.println("Email com múltiplos anexos enviado com sucesso para: " + emailCentralPagamentos);
+            System.out.println("=== FIM ENVIO EMAIL PRINCIPAL (MÚLTIPLOS ANEXOS) ===");
             
         } catch (Exception e) {
             System.err.println("Erro ao enviar email principal: " + e.getMessage());
             e.printStackTrace();
             throw new MessagingException("Erro ao enviar email: " + e.getMessage(), e);
+        }
+        
+        // Envia email de confirmação separado para o remetente (Gmail)
+        try {
+            System.out.println("Enviando email de confirmação para o remetente: " + emailRemetente);
+            
+            String corpoConfirmacao = "Confirmação de Envio de Recibos\n\n" +
+                    "Este é um email de confirmação de que os recibos foram enviados com sucesso.\n\n" +
+                    "Detalhes:\n" +
+                    "- Destinatário Principal: " + emailCentralPagamentos + "\n" +
+                    "- Gerente Solicitante: " + nomeDestinatario + " (" + emailDestinatario + ")\n" +
+                    "- Prestador: " + nomePrestador + "\n" +
+                    "- Assunto: " + assunto + "\n" +
+                    "- Número de Recibos: " + pdfsRecibos.size() + "\n\n" +
+                    "Os recibos foram enviados para o central de pagamentos e uma cópia foi enviada para o gerente solicitante.";
+            
+            MimeMessage messageConfirmacao = criarMensagemComMultiplosAnexos(
+                    emailRemetente,
+                    null,
+                    "Confirmação - " + assunto,
+                    corpoConfirmacao,
+                    pdfsRecibos
+            );
+            
+            enviarViaSmtp(messageConfirmacao);
+            System.out.println("Email de confirmação enviado com sucesso para: " + emailRemetente);
+        } catch (Exception e) {
+            System.err.println("Erro ao enviar email de confirmação para " + emailRemetente + ": " + e.getMessage());
+            e.printStackTrace();
+            // Não re-lança a exceção aqui, pois o email principal já foi enviado
         }
         
         // Envia email separado para o gerente (cópia)
@@ -345,7 +449,7 @@ public class EmailService {
                         pdfsRecibos
                 );
                 
-                enviarViaSesSdk(messageCopia);
+                enviarViaSmtp(messageCopia);
                 System.out.println("Email de cópia enviado com sucesso para o gerente!");
             } catch (Exception e) {
                 System.err.println("Erro ao enviar cópia do email para " + emailDestinatario + ": " + e.getMessage());
@@ -363,8 +467,7 @@ public class EmailService {
             String nomeArquivo,
             byte[] anexo) throws MessagingException {
         
-        Session session = Session.getDefaultInstance(new Properties());
-        MimeMessage message = new MimeMessage(session);
+        MimeMessage message = new MimeMessage(mailSession);
         
         try {
             message.setFrom(new InternetAddress(emailRemetente, nomeRemetente, "UTF-8"));
@@ -374,7 +477,28 @@ public class EmailService {
                 message.setRecipient(jakarta.mail.Message.RecipientType.CC, new InternetAddress(cc));
             }
             
+            // Removido BCC do remetente - pode causar problemas de reputação
+            // Se precisar de confirmação, envie email separado
+            
+            // Adiciona Reply-To
+            message.setReplyTo(new jakarta.mail.Address[] { new InternetAddress(emailRemetente) });
+            
             message.setSubject(assunto, "UTF-8");
+            
+            // Headers para melhorar a entrega e evitar spam
+            // Message-ID único para cada email
+            String messageId = "<" + UUID.randomUUID().toString() + "@precisaoadm.com.br>";
+            message.setHeader("Message-ID", messageId);
+            
+            // Headers de prioridade (removido "Precedence: bulk" que é sinal negativo)
+            message.setHeader("X-Priority", "3");
+            message.setHeader("Importance", "Normal");
+            message.setHeader("X-Mailer", "Sistema de Recibos Precisão");
+            
+            // Headers adicionais para melhorar reputação
+            message.setHeader("X-Auto-Response-Suppress", "All");
+            message.setHeader("Auto-Submitted", "auto-generated");
+            
         } catch (java.io.UnsupportedEncodingException e) {
             // Fallback sem charset se UTF-8 não for suportado
             message.setFrom(new InternetAddress(emailRemetente));
@@ -384,25 +508,60 @@ public class EmailService {
                 message.setRecipient(jakarta.mail.Message.RecipientType.CC, new InternetAddress(cc));
             }
             
+            // Removido BCC do remetente - pode causar problemas de reputação
+            // Se precisar de confirmação, envie email separado
+            
+            // Adiciona Reply-To
+            message.setReplyTo(new jakarta.mail.Address[] { new InternetAddress(emailRemetente) });
+            
             message.setSubject(assunto);
+            
+            // Headers para melhorar a entrega e evitar spam
+            // Message-ID único para cada email
+            String messageId = "<" + UUID.randomUUID().toString() + "@precisaoadm.com.br>";
+            message.setHeader("Message-ID", messageId);
+            
+            // Headers de prioridade (removido "Precedence: bulk" que é sinal negativo)
+            message.setHeader("X-Priority", "3");
+            message.setHeader("Importance", "Normal");
+            message.setHeader("X-Mailer", "Sistema de Recibos Precisão");
+            
+            // Headers adicionais para melhorar reputação
+            message.setHeader("X-Auto-Response-Suppress", "All");
+            // Removido Auto-Submitted pois pode ser visto como negativo por alguns filtros
+            message.setHeader("Date", ZonedDateTime.now().format(DateTimeFormatter.RFC_1123_DATE_TIME));
+            message.setHeader("MIME-Version", "1.0");
         }
         
-        // Cria multipart para HTML + anexo
-        MimeMultipart multipart = new MimeMultipart("mixed");
+        // Cria estrutura multipart: alternative (text + html) + anexos
+        MimeMultipart rootMultipart = new MimeMultipart("mixed");
+        
+        // Container para texto e HTML (alternative)
+        MimeMultipart alternativeMultipart = new MimeMultipart("alternative");
+        MimeBodyPart alternativePart = new MimeBodyPart();
+        
+        // Parte texto plano (importante para evitar spam)
+        MimeBodyPart textPart = new MimeBodyPart();
+        String textoPlano = converterHtmlParaTexto(corpoHtml);
+        textPart.setContent(textoPlano, "text/plain; charset=UTF-8");
+        alternativeMultipart.addBodyPart(textPart);
         
         // Parte HTML
         MimeBodyPart htmlPart = new MimeBodyPart();
         htmlPart.setContent(corpoHtml, "text/html; charset=UTF-8");
-        multipart.addBodyPart(htmlPart);
+        alternativeMultipart.addBodyPart(htmlPart);
+        
+        alternativePart.setContent(alternativeMultipart);
+        rootMultipart.addBodyPart(alternativePart);
         
         // Parte anexo
         MimeBodyPart attachmentPart = new MimeBodyPart();
         attachmentPart.setFileName(nomeArquivo);
         attachmentPart.setContent(anexo, "application/pdf");
         attachmentPart.setDisposition(jakarta.mail.Part.ATTACHMENT);
-        multipart.addBodyPart(attachmentPart);
+        rootMultipart.addBodyPart(attachmentPart);
         
-        message.setContent(multipart);
+        message.setContent(rootMultipart);
         return message;
     }
 
@@ -413,8 +572,7 @@ public class EmailService {
             String corpoHtml,
             java.util.Map<String, byte[]> anexos) throws MessagingException {
         
-        Session session = Session.getDefaultInstance(new Properties());
-        MimeMessage message = new MimeMessage(session);
+        MimeMessage message = new MimeMessage(mailSession);
         
         try {
             message.setFrom(new InternetAddress(emailRemetente, nomeRemetente, "UTF-8"));
@@ -424,7 +582,30 @@ public class EmailService {
                 message.setRecipient(jakarta.mail.Message.RecipientType.CC, new InternetAddress(cc));
             }
             
+            // Removido BCC do remetente - pode causar problemas de reputação
+            // Se precisar de confirmação, envie email separado
+            
+            // Adiciona Reply-To
+            message.setReplyTo(new jakarta.mail.Address[] { new InternetAddress(emailRemetente) });
+            
             message.setSubject(assunto, "UTF-8");
+            
+            // Headers para melhorar a entrega e evitar spam
+            // Message-ID único para cada email
+            String messageId = "<" + UUID.randomUUID().toString() + "@precisaoadm.com.br>";
+            message.setHeader("Message-ID", messageId);
+            
+            // Headers de prioridade (removido "Precedence: bulk" que é sinal negativo)
+            message.setHeader("X-Priority", "3");
+            message.setHeader("Importance", "Normal");
+            message.setHeader("X-Mailer", "Sistema de Recibos Precisão");
+            
+            // Headers adicionais para melhorar reputação
+            message.setHeader("X-Auto-Response-Suppress", "All");
+            // Removido Auto-Submitted pois pode ser visto como negativo por alguns filtros
+            message.setHeader("Date", ZonedDateTime.now().format(DateTimeFormatter.RFC_1123_DATE_TIME));
+            message.setHeader("MIME-Version", "1.0");
+            
         } catch (java.io.UnsupportedEncodingException e) {
             message.setFrom(new InternetAddress(emailRemetente));
             message.setRecipient(jakarta.mail.Message.RecipientType.TO, new InternetAddress(destinatario));
@@ -433,16 +614,51 @@ public class EmailService {
                 message.setRecipient(jakarta.mail.Message.RecipientType.CC, new InternetAddress(cc));
             }
             
+            // Removido BCC do remetente - pode causar problemas de reputação
+            // Se precisar de confirmação, envie email separado
+            
+            // Adiciona Reply-To
+            message.setReplyTo(new jakarta.mail.Address[] { new InternetAddress(emailRemetente) });
+            
             message.setSubject(assunto);
+            
+            // Headers para melhorar a entrega e evitar spam
+            // Message-ID único para cada email
+            String messageId = "<" + UUID.randomUUID().toString() + "@precisaoadm.com.br>";
+            message.setHeader("Message-ID", messageId);
+            
+            // Headers de prioridade (removido "Precedence: bulk" que é sinal negativo)
+            message.setHeader("X-Priority", "3");
+            message.setHeader("Importance", "Normal");
+            message.setHeader("X-Mailer", "Sistema de Recibos Precisão");
+            
+            // Headers adicionais para melhorar reputação
+            message.setHeader("X-Auto-Response-Suppress", "All");
+            // Removido Auto-Submitted pois pode ser visto como negativo por alguns filtros
+            message.setHeader("Date", ZonedDateTime.now().format(DateTimeFormatter.RFC_1123_DATE_TIME));
+            message.setHeader("MIME-Version", "1.0");
         }
         
-        // Cria multipart para HTML + múltiplos anexos
-        MimeMultipart multipart = new MimeMultipart("mixed");
+        // Cria estrutura multipart: alternative (text + html) + anexos
+        MimeMultipart rootMultipart = new MimeMultipart("mixed");
+        
+        // Container para texto e HTML (alternative)
+        MimeMultipart alternativeMultipart = new MimeMultipart("alternative");
+        MimeBodyPart alternativePart = new MimeBodyPart();
+        
+        // Parte texto plano (importante para evitar spam)
+        MimeBodyPart textPart = new MimeBodyPart();
+        String textoPlano = converterHtmlParaTexto(corpoHtml);
+        textPart.setContent(textoPlano, "text/plain; charset=UTF-8");
+        alternativeMultipart.addBodyPart(textPart);
         
         // Parte HTML
         MimeBodyPart htmlPart = new MimeBodyPart();
         htmlPart.setContent(corpoHtml, "text/html; charset=UTF-8");
-        multipart.addBodyPart(htmlPart);
+        alternativeMultipart.addBodyPart(htmlPart);
+        
+        alternativePart.setContent(alternativeMultipart);
+        rootMultipart.addBodyPart(alternativePart);
         
         // Adiciona todos os anexos
         for (java.util.Map.Entry<String, byte[]> anexo : anexos.entrySet()) {
@@ -450,32 +666,32 @@ public class EmailService {
             attachmentPart.setFileName(anexo.getKey());
             attachmentPart.setContent(anexo.getValue(), "application/pdf");
             attachmentPart.setDisposition(jakarta.mail.Part.ATTACHMENT);
-            multipart.addBodyPart(attachmentPart);
+            rootMultipart.addBodyPart(attachmentPart);
         }
         
-        message.setContent(multipart);
+        message.setContent(rootMultipart);
         return message;
     }
 
-    private void enviarViaSesSdk(MimeMessage message) throws MessagingException {
+    private void enviarViaSmtp(MimeMessage message) throws MessagingException {
         try {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            message.writeTo(outputStream);
+            // Log do destinatário antes de enviar
+            jakarta.mail.Address[] toAddresses = message.getRecipients(jakarta.mail.Message.RecipientType.TO);
+            if (toAddresses != null && toAddresses.length > 0) {
+                System.out.println("Enviando email via SMTP Gmail para: " + toAddresses[0].toString());
+            }
             
-            RawMessage rawMessage = RawMessage.builder()
-                    .data(SdkBytes.fromByteArray(outputStream.toByteArray()))
-                    .build();
-            
-            SendRawEmailRequest rawEmailRequest = SendRawEmailRequest.builder()
-                    .rawMessage(rawMessage)
-                    .build();
-            
-            sesClient.sendRawEmail(rawEmailRequest);
+            // Envia email via SMTP
+            Transport.send(message);
+            System.out.println("Email enviado com sucesso via SMTP Gmail!");
             
         } catch (jakarta.mail.MessagingException e) {
-            throw new MessagingException("Erro ao criar mensagem MIME: " + e.getMessage(), e);
+            System.err.println("Erro ao enviar email via SMTP: " + e.getMessage());
+            throw new MessagingException("Erro ao enviar email via SMTP: " + e.getMessage(), e);
         } catch (Exception e) {
-            throw new MessagingException("Erro ao enviar via AWS SES SDK: " + e.getMessage(), e);
+            System.err.println("Erro ao enviar via SMTP Gmail: " + e.getMessage());
+            e.printStackTrace();
+            throw new MessagingException("Erro ao enviar via SMTP Gmail: " + e.getMessage(), e);
         }
     }
 
@@ -707,6 +923,47 @@ public class EmailService {
                 dataAtual,
                 LocalDate.now().getYear()
         );
+    }
+
+    private String converterHtmlParaTexto(String html) {
+        if (html == null || html.isBlank()) {
+            return "";
+        }
+        
+        // Remove tags HTML básicas e converte para texto
+        String texto = html
+                .replaceAll("<br\\s*/?>", "\n")
+                .replaceAll("<p[^>]*>", "\n")
+                .replaceAll("</p>", "\n")
+                .replaceAll("<div[^>]*>", "\n")
+                .replaceAll("</div>", "\n")
+                .replaceAll("<h[1-6][^>]*>", "\n")
+                .replaceAll("</h[1-6]>", "\n")
+                .replaceAll("<li[^>]*>", "\n- ")
+                .replaceAll("</li>", "")
+                .replaceAll("<ul[^>]*>", "\n")
+                .replaceAll("</ul>", "\n")
+                .replaceAll("<ol[^>]*>", "\n")
+                .replaceAll("</ol>", "\n")
+                .replaceAll("<strong[^>]*>", "")
+                .replaceAll("</strong>", "")
+                .replaceAll("<b[^>]*>", "")
+                .replaceAll("</b>", "")
+                .replaceAll("<em[^>]*>", "")
+                .replaceAll("</em>", "")
+                .replaceAll("<i[^>]*>", "")
+                .replaceAll("</i>", "")
+                .replaceAll("<[^>]+>", "") // Remove todas as outras tags
+                .replaceAll("&nbsp;", " ")
+                .replaceAll("&amp;", "&")
+                .replaceAll("&lt;", "<")
+                .replaceAll("&gt;", ">")
+                .replaceAll("&quot;", "\"")
+                .replaceAll("&#39;", "'")
+                .replaceAll("\\n\\s*\\n\\s*\\n+", "\n\n") // Remove múltiplas quebras de linha
+                .trim();
+        
+        return texto;
     }
 
     private String gerarNomeArquivo(String nomePrestador) {
