@@ -69,8 +69,9 @@ if ps -p $APP_PID > /dev/null; then
     echo "✅ APLICAÇÃO ATUALIZADA E RODANDO!"
     echo "============================================"
     echo "PID: $APP_PID"
-    echo "URL: http://18.221.148.28:8080"
-    echo "Swagger: http://18.221.148.28:8080/swagger-ui.html"
+    IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "3.136.3.86")
+    echo "URL: http://$IP:8080"
+    echo "Swagger: http://$IP:8080/swagger-ui.html"
     echo ""
     echo "Testando endpoints..."
     curl -s http://localhost:8080/recibos/validar-cpf?cpf=12345678901 | head -c 100
