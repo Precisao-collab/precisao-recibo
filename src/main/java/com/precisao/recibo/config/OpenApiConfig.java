@@ -16,7 +16,7 @@ import io.swagger.v3.oas.annotations.servers.Server;
         ),
         servers = {
                 @Server(url = "http://localhost:8080", description = "Servidor local"),
-                @Server(url = "http://3.136.3.86:8080", description = "Servidor EC2 (Elastic IP)")
+                @Server(url = "https://informative-projected-extending-warriors.trycloudflare.com", description = "Servidor EC2 via Cloudflare Tunnel (HTTPS)")
         }
 )
 public class OpenApiConfig {
